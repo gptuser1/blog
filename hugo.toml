@@ -1,4 +1,4 @@
 baseURL = 'https://blog.imagic.dpdns.org/'
 languageCode = 'en-us'
 title = 'iMagic Blog'
-theme = 'PaperMod'
+theme = 'NightFall'
