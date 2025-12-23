@@ -1,10 +1,52 @@
-baseURL = 'https://blog.imagic.dpdns.org/'
-languageCode = 'en-us'
-title = 'iMagic Blog'
-theme = 'PaperMod'
+baseURL: "https://blog.imagic.dpdns.org/"
+languageCode: "en-us"
+title: "iMagic Blog"
+theme: "PaperMod"
 
 params:
+  env: production
+  description: "折腾记录"
+  author: "iMagic"
+  DateFormat: "2006-01-02"
+  defaultTheme: auto
+  
+  # 只开启最必要的
+  ShowReadingTime: true
+  ShowPostNavLinks: true
+  ShowCodeCopyButtons: true
+  
+  # 关闭花哨功能
+  ShowShareButtons: false
+  ShowBreadCrumbs: false
+  ShowWordCount: false
+  ShowRssButtonInSectionTermList: false
+  
+  # 主页模式
   homeInfoParams:
     Title: "欢迎来到我的Blog"
     Content: "记录踩坑"
+  
+  # 关闭个人资料卡
+  profileMode:
+    enabled: false
+  
+  # 简单社交链接
+  socialIcons:
+    - name: github
+      url: "https://github.com/"
 
+# 简单菜单
+menu:
+  main:
+    - name: 文章
+      url: /posts/
+      weight: 10
+    - name: 分类
+      url: /categories/
+      weight: 20
+    - name: 标签
+      url: /tags/
+      weight: 30
+
+# 代码高亮
+pygmentsUseClasses: true
