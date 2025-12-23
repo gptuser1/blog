@@ -23,7 +23,7 @@ params:
   
   # 主页模式
   homeInfoParams:
-    Title: "欢迎来到我的Blog"
+    Title: "欢迎来到我的屋子"
     Content: "记录踩坑"
   
   # 关闭个人资料卡
