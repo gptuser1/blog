@@ -2,3 +2,9 @@ baseURL = 'https://blog.imagic.dpdns.org/'
 languageCode = 'en-us'
 title = 'iMagic Blog'
 theme = 'PaperMod'
+
+params:
+  homeInfoParams:
+    Title: "欢迎来到我的Blog"
+    Content: "记录踩坑"
+
