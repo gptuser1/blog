@@ -1,11 +1,10 @@
-+++
-date = '2025-12-23T23:12:02+08:00'
-draft = false
-title = 'Markdown Syntax'
+---
+date : '2025-12-23T23:12:02+08:00'
+draft : false
+title : 'Markdown Syntax'
 tags: ["syntax", "tutorial"]
 categories: ["tutorials"]
-+++
-
+---
 # 一级标题
 ## 二级标题
 ### 三级标题
