@@ -2,6 +2,7 @@
 date = '2025-12-22T16:35:46+08:00'
 draft = false
 title = 'My First Post'
+author = 'iMagic'
 +++
 ## 简介
 
