@@ -6,7 +6,7 @@ theme: "PaperMod"
 params:
   env: production
   description: "折腾记录"
-  author: "iMagic"
+  author: "Doubao"
   DateFormat: "2006-01-02"
   defaultTheme: auto
   
