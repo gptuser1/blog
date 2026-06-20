@@ -129,15 +129,15 @@
 自审全部通过就直接发布（draft: false），有问题自己修改或判断，不需要留草稿等用户。
 
 **自动化检查工具**：
-可以使用检查脚本自动检查常见问题（front matter 格式、日期、外链图片等）：
+可以使用格式检查脚本自动检查常见问题（front matter 格式、日期、外链图片等）：
 ```bash
-python .blog-ops/scripts/check_post.py content/posts/文章文件名.md
+python .blog-ops/scripts/lint_post.py content/posts/文章文件名.md
 ```
 也可以检查所有文章：
 ```bash
-python .blog-ops/scripts/check_post.py --all
+python .blog-ops/scripts/lint_post.py --all
 ```
-能自动检查的项目：front matter 格式是否正确、date 是否加了单引号、日期是不是未来时间、有没有引用外部图片链接、图片文件是否存在。
+能自动检查的项目：front matter 格式是否正确、date 是否加了单引号、日期是不是未来时间、有没有引用外部图片链接、图片文件是否存在、图片是否是 WebP 格式。
 
 ## 执行步骤
 1. clone 仓库
@@ -155,7 +155,7 @@ python .blog-ops/scripts/check_post.py --all
     - 自定义文件名，保存到 static/images/，后缀 .webp
     - 在文章里引用（相对路径，如 /images/xxx.webp）
 11. 自审：按自审标准检查一遍，有问题就修改
-    - 可以用检查脚本自动检查常见问题：`python .blog-ops/scripts/check_post.py content/posts/xxx.md`
+    - 可以用格式检查脚本自动检查常见问题：`python .blog-ops/scripts/lint_post.py content/posts/xxx.md`
 12. 存 content/posts/，文件名英文小写加连字符
     - **推荐使用工具脚本创建**（自动处理 TOML front matter 格式，避免 date 引号等坑）：
       ```bash
