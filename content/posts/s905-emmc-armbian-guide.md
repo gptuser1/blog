@@ -1,5 +1,5 @@
 +++
-date = '2026-06-19T18:35:00+08:00'
+date = '2026-06-19T09:30:00+08:00'
 draft = false
 title = 'S905 / S905B 盒子从 eMMC 启动 Armbian：以 DM4036 为例'
 tags = ["技术折腾", "Armbian", "电视盒子", "S905", "Linux", "eMMC"]
