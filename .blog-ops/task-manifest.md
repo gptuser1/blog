@@ -175,6 +175,68 @@ python .blog-ops/scripts/lint_post.py --all
 - task-manifest.md：本文件，任务说明
 - publish-log.md：发布日志，记录每天发布了什么文章，只保留最近 30 条
 - topics.md：选题池，想到的主题存这里
+- requirements.txt：工具脚本依赖列表
+
+## 工具脚本
+
+所有脚本都在 `.blog-ops/scripts/` 目录下。
+
+### 1. process_image.py —— 图片处理工具
+**功能**：按最大边等比缩放（默认 1200px）、转 WebP 格式（默认质量 80）、超过 500KB 自动降质量
+
+**用法**：
+```bash
+python .blog-ops/scripts/process_image.py <输入图片路径> <输出图片.webp> [选项]
+```
+
+**选项**：
+- `--max-size`：最大边像素，默认 1200
+- `--quality`：WebP 质量，默认 80
+- `--max-kb`：最大文件大小 KB，默认 500，超过自动降质量
+- `--min-size`：最小边像素，默认 0（不限制）
+
+**依赖**：Pillow（`pip install Pillow`）
+
+### 2. create_post.py —— 文章创建工具
+**功能**：自动生成 TOML front matter（date 自动加单引号）、自动生成 slug、创建文章文件
+
+**用法**：
+```bash
+python .blog-ops/scripts/create_post.py --title "文章标题" --content "正文内容" [选项]
+```
+
+**选项**：
+- `--date`：发布时间，格式 `YYYY-MM-DDTHH:MM:SS+08:00`，默认当前北京时间
+- `--tags`：标签列表，空格分隔
+- `--categories`：分类列表，空格分隔
+- `--draft`：设为草稿
+- `--slug`：自定义 URL 别名，默认从标题生成
+- `--output-dir`：输出目录，默认 `content/posts/`
+
+**依赖**：仅标准库
+
+### 3. lint_post.py —— 格式检查/自审工具
+**功能**：自动检查 front matter 格式、date 引号、未来时间、外链图片、图片存在性、图片格式等
+
+**用法**：
+```bash
+# 检查单篇文章
+python .blog-ops/scripts/lint_post.py content/posts/文章文件名.md
+
+# 检查所有文章
+python .blog-ops/scripts/lint_post.py --all
+```
+
+**能自动检查的项目**：
+- front matter 格式是否正确（TOML 格式）
+- date 字段是否加了单引号
+- date 是不是未来时间
+- 有没有引用外部图片链接
+- 引用的图片文件是否存在
+- 图片是否是 WebP 格式
+- 图片文件大小是否超标
+
+**依赖**：仅标准库
 
 ## 审核机制
 AI 自审自发布，不需要用户审核。
