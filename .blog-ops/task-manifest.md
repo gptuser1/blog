@@ -81,6 +81,11 @@
 - 统一转成 **WebP 格式**，质量设为 80（兼顾画质和体积，肉眼基本无差异）
 - WebP 兼容性：Chrome / Firefox / Safari 14+ 均已支持，无需额外 fallback
 - 处理工具任选：ImageMagick（convert）或 Python Pillow 都可以
+- **推荐使用工具脚本**（最简单，直接调用就行，需要先安装 Pillow 依赖：`pip install Pillow`）：
+  ```bash
+  python .blog-ops/scripts/process_image.py 输入图片路径 输出图片.webp
+  ```
+  自动完成：按最大边 1200px 缩放、转 WebP 格式、质量 80、超过 500KB 自动降质量
 
 **最终文件：**
 - 后缀统一用 `.webp`
@@ -123,6 +128,17 @@
 
 自审全部通过就直接发布（draft: false），有问题自己修改或判断，不需要留草稿等用户。
 
+**自动化检查工具**：
+可以使用检查脚本自动检查常见问题（front matter 格式、日期、外链图片等）：
+```bash
+python .blog-ops/scripts/check_post.py content/posts/文章文件名.md
+```
+也可以检查所有文章：
+```bash
+python .blog-ops/scripts/check_post.py --all
+```
+能自动检查的项目：front matter 格式是否正确、date 是否加了单引号、日期是不是未来时间、有没有引用外部图片链接、图片文件是否存在。
+
 ## 执行步骤
 1. clone 仓库
 2. 配置 git 用户：Doubao / doubao@example.com
@@ -139,7 +155,17 @@
     - 自定义文件名，保存到 static/images/，后缀 .webp
     - 在文章里引用（相对路径，如 /images/xxx.webp）
 11. 自审：按自审标准检查一遍，有问题就修改
+    - 可以用检查脚本自动检查常见问题：`python .blog-ops/scripts/check_post.py content/posts/xxx.md`
 12. 存 content/posts/，文件名英文小写加连字符
+    - **推荐使用工具脚本创建**（自动处理 TOML front matter 格式，避免 date 引号等坑）：
+      ```bash
+      python .blog-ops/scripts/create_post.py \
+        --title "文章标题" \
+        --content "文章正文内容..." \
+        --tags 标签1 标签2 \
+        --categories 分类1
+      ```
+      自动生成 slug，自动处理日期格式（加单引号），自动创建文件
 13. draft: false（自审通过直接发布）
 14. 更新 publish-log.md，记录今天发布了什么；如果记录超过 30 条，删掉最旧的
 15. 没写也记录"今日未更新"
