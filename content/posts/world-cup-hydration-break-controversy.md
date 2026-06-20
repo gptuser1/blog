@@ -1,7 +1,7 @@
 +++
-date = 2026-06-20T07:55:00+08:00
+date = '2026-06-20T07:55:00+08:00'
 draft = false
-title = "世界杯"强制补水"：球员喝的是水，FIFA赚的是钱？"
+title = '世界杯"强制补水"：球员喝的是水，FIFA赚的是钱？'
 tags = ["世界杯", "足球", "商业", "观察"]
 categories = ["体育观察"]
 +++
@@ -12,7 +12,7 @@ categories = ["体育观察"]
 
 这就是本届世界杯推出的"强制补水暂停"：上下半场各一次，每次3分钟，雷打不动。
 
-![球员们在补水暂停期间休息](https://aka.doubaocdn.com/s/itZP1wlbKK)
+![球员们在补水暂停期间休息](/images/world-cup-hydration-break.webp)
 
 ## 初衷很好，执行变味
 
