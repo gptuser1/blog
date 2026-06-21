@@ -145,18 +145,22 @@ python .blog-ops/scripts/lint_post.py --all
 3. 读 manifest（就是这个文件）
 4. 读 publish-log.md 看最近发布记录
 5. 读 2-3 篇已发布文章，找回风格
-6. 搜新闻/热点，找选题
-7. 看 topics.md 选题池
-8. 判断今天要不要写，同时考虑话题多样性：看看最近3篇的主题，如果最近连续写了同方向的，尽量换个方向
-9. 写文章，800-1500 字
-10. 适当配图：优先从网络搜索合适的图片，2-3张
+6. 运行选题脚本，获取今天的写作话题：
+   ```bash
+   python .blog-ops/scripts/pick_topic.py
+   ```
+   - 如果输出 `RESULT: pool`，直接用 `TOPIC:` 后面的话题写
+   - 如果输出 `RESULT: search`，按照 `INSTRUCTION:` 后面的指令去搜索找话题
+7. 判断今天要不要写（一般都写，除非实在没合适的话题）
+8. 写文章，800-1500 字
+9. 适当配图：优先从网络搜索合适的图片，2-3张
     - **必须下载到本地**：用 curl 或 Python requests 下载原图，不要直接引用外部链接
     - 下载后必须优化处理：按分辨率限制缩放，转 WebP 格式（质量 80）
     - 自定义文件名，保存到 static/images/，后缀 .webp
     - 在文章里引用（相对路径，如 /images/xxx.webp）
-11. 自审：按自审标准检查一遍，有问题就修改
+10. 自审：按自审标准检查一遍，有问题就修改
     - 可以用格式检查脚本自动检查常见问题：`python .blog-ops/scripts/lint_post.py content/posts/xxx.md`
-12. 存 content/posts/，文件名英文小写加连字符
+11. 存 content/posts/，文件名英文小写加连字符
     - **推荐使用工具脚本创建**（自动处理 TOML front matter 格式，避免 date 引号等坑）：
       ```bash
       python .blog-ops/scripts/create_post.py \
@@ -166,10 +170,10 @@ python .blog-ops/scripts/lint_post.py --all
         --categories 分类1
       ```
       自动生成 slug，自动处理日期格式（加单引号），自动创建文件
-13. draft: false（自审通过直接发布）
-14. 更新 publish-log.md，记录今天发布了什么；如果记录超过 30 条，删掉最旧的
-15. 没写也记录"今日未更新"
-16. 提交推送，commit message 用英文
+12. draft: false（自审通过直接发布）
+13. 更新 publish-log.md，记录今天发布了什么；如果记录超过 30 条，删掉最旧的
+14. 没写也记录"今日未更新"
+15. 提交推送，commit message 用英文
 
 ## 文件说明
 - task-manifest.md：本文件，任务说明
@@ -235,6 +239,35 @@ python .blog-ops/scripts/lint_post.py --all
 - 引用的图片文件是否存在
 - 图片是否是 WebP 格式
 - 图片文件大小是否超标
+
+**依赖**：仅标准库
+
+### 4. pick_topic.py —— 选题工具
+**功能**：从选题池或实时搜索中加权选择写作话题，规范选题过程，提高选题池利用率
+
+**用法**：
+```bash
+python .blog-ops/scripts/pick_topic.py [选项]
+```
+
+**输出格式**：
+- 情况 A（选题池选中）：
+  ```
+  RESULT: pool
+  TOPIC: 选题标题
+  ```
+- 情况 B（需要搜索）：
+  ```
+  RESULT: search
+  INSTRUCTION: 搜索指令文本
+  ```
+
+**选项**：
+- `--pool-weight`：选题池权重，默认 0.7（70% 概率从选题池选）
+- `--diversity-count`：考虑最近几篇的话题多样性，默认 3
+- `--topics-path`：选题池文件路径，默认 `.blog-ops/topics.md`
+- `--log-path`：发布日志路径，默认 `.blog-ops/publish-log.md`
+- `--seed`：随机种子（用于测试）
 
 **依赖**：仅标准库
 
