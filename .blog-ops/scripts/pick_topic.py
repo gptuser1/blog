@@ -9,14 +9,17 @@
     --topics-path PATH     选题池文件路径，默认 .blog-ops/topics.md
     --log-path PATH        发布日志路径，默认 .blog-ops/publish-log.md
     --seed INT             随机种子（用于测试）
+    --dry-run              只输出结果，不修改选题池（用于测试）
 输出：
     情况 A（选题池选中）：
         RESULT: pool
         TOPIC: 选题标题
-
+        REMOVED: true/false
     情况 B（需要搜索）：
         RESULT: search
         INSTRUCTION: 搜索指令文本
+
+注意：从选题池选中的话题会自动从选题池中删除，避免重复选中。
 """
 import argparse
 import os
@@ -39,23 +42,70 @@ def parse_topics(topics_path):
     
     in_pending = False
     for line in lines:
-        line = line.strip()
+        line_stripped = line.strip()
         
         # 找到"待写主题"章节
-        if line.startswith('## 待写主题'):
+        if line_stripped.startswith('## 待写主题'):
             in_pending = True
             continue
         
-        if in_pending and line.startswith('## '):
+        if in_pending and line_stripped.startswith('## '):
             # 遇到下一个章节，结束
             break
         
-        if in_pending and line.startswith('- '):
-            topic = line[2:].strip()
+        if in_pending and line_stripped.startswith('- '):
+            topic = line_stripped[2:].strip()
             if topic:
                 topics.append(topic)
     
     return topics
+
+
+def remove_topic_from_pool(topic, topics_path):
+    """
+    从选题池中删除指定的话题
+    Returns:
+        bool: 是否成功删除
+    """
+    if not os.path.exists(topics_path):
+        return False
+    
+    with open(topics_path, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+    
+    in_pending = False
+    new_lines = []
+    removed = False
+    
+    for line in lines:
+        line_stripped = line.strip()
+        
+        # 找到"待写主题"章节
+        if line_stripped.startswith('## 待写主题'):
+            in_pending = True
+            new_lines.append(line)
+            continue
+        
+        if in_pending and line_stripped.startswith('## '):
+            # 遇到下一个章节，结束
+            in_pending = False
+            new_lines.append(line)
+            continue
+        
+        if in_pending and line_stripped.startswith('- '):
+            topic_text = line_stripped[2:].strip()
+            if topic_text == topic and not removed:
+                # 跳过这一行，即删除
+                removed = True
+                continue
+        
+        new_lines.append(line)
+    
+    if removed:
+        with open(topics_path, 'w', encoding='utf-8') as f:
+            f.writelines(new_lines)
+    
+    return removed
 
 
 def parse_publish_log(log_path, count=3):
@@ -194,6 +244,8 @@ def main():
                         help='发布日志路径')
     parser.add_argument('--seed', type=int, default=None,
                         help='随机种子（用于测试）')
+    parser.add_argument('--dry-run', action='store_true',
+                        help='只输出结果，不修改选题池（用于测试）')
     args = parser.parse_args()
     
     # 执行选题
@@ -209,6 +261,14 @@ def main():
     if result_type == 'pool':
         print(f'RESULT: pool')
         print(f'TOPIC: {content}')
+        
+        # 如果不是 dry-run，从选题池中删除
+        if not args.dry_run:
+            removed = remove_topic_from_pool(content, args.topics_path)
+            print(f'REMOVED: {"true" if removed else "false"}')
+        else:
+            print(f'REMOVED: false (dry-run)')
+        
         return 0
     else:
         print(f'RESULT: search')
