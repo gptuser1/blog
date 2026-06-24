@@ -132,10 +132,13 @@ def should_publish(state, now_dt, config):
 # ==================== Topic Selection ====================
 
 def pick_topic_from_pool():
-    """Run pick_topic.py to select from topic pool or get search instruction."""
+    """Run pick_topic.py to select from topic pool or get search instruction.
+    Uses --no-remove so the topic is only removed after successful publish.
+    """
     stdout, rc = run_script([
         sys.executable,
         os.path.join(SCRIPT_DIR, "pick_topic.py"),
+        "--no-remove",
     ])
 
     if rc != 0:
@@ -155,6 +158,23 @@ def pick_topic_from_pool():
     if result_type == "pool" and content:
         return "pool", content
     return "search", content or "请搜索近期实时热点和新闻，选择一个值得写的话题。"
+
+
+def remove_topic_from_pool(topic):
+    """Remove a topic from the pool after successful publish.
+    Calls pick_topic.py's removal logic via a direct import to avoid
+    spawning a subprocess just for deletion.
+    """
+    try:
+        sys.path.insert(0, SCRIPT_DIR)
+        import pick_topic as pt
+        removed = pt.remove_topic_from_pool(topic, TOPICS_PATH)
+        if removed:
+            print(f"Topic removed from pool: {topic}")
+        return removed
+    except Exception as e:
+        print(f"Warning: failed to remove topic from pool: {e}", file=sys.stderr)
+        return False
 
 
 def get_recent_titles(count=3):
@@ -267,6 +287,40 @@ def build_article_prompt(topic, material_text, recent_titles):
     return system_prompt, user_prompt
 
 
+def _extract_json_fields(text):
+    """
+    Fallback: extract title/content/tags/categories from a malformed JSON
+    response using regex. Handles cases where content has unescaped chars.
+    """
+    result = {}
+
+    # title: "title": "..."  (stop at next top-level key or closing brace)
+    m = re.search(r'"title"\s*:\s*"((?:[^"\\]|\\.)*)"', text)
+    if m:
+        result["title"] = m.group(1).encode().decode("unicode_escape", errors="replace")
+
+    # content: "content": "..." up to "tags" or "categories" or end
+    m = re.search(r'"content"\s*:\s*"((?:[^"\\]|\\.)*)"', text, re.DOTALL)
+    if m:
+        result["content"] = m.group(1).encode().decode("unicode_escape", errors="replace")
+
+    # tags: "tags": ["a", "b", ...]
+    m = re.search(r'"tags"\s*:\s*\[([^\]]*)\]', text)
+    if m:
+        tags = re.findall(r'"([^"]*)"', m.group(1))
+        result["tags"] = tags
+
+    # categories
+    m = re.search(r'"categories"\s*:\s*\[([^\]]*)\]', text)
+    if m:
+        cats = re.findall(r'"([^"]*)"', m.group(1))
+        result["categories"] = cats
+
+    if "title" in result and "content" in result:
+        return result
+    return None
+
+
 def generate_article(text_provider, topic, material_text, recent_titles):
     """Generate article via AI. Returns dict or None."""
     system_prompt, user_prompt = build_article_prompt(
@@ -281,8 +335,16 @@ def generate_article(text_provider, topic, material_text, recent_titles):
     try:
         response = text_provider.generate(messages, max_tokens=4096, temperature=0.85)
     except Exception as e:
-        print(f"AI article generation failed: {e}", file=sys.stderr)
-        return None
+        print(f"AI article generation failed (attempt 1): {e}", file=sys.stderr)
+        # Retry once after a short pause
+        import time
+        time.sleep(5)
+        try:
+            response = text_provider.generate(messages, max_tokens=4096, temperature=0.85)
+            print("Retry succeeded")
+        except Exception as e2:
+            print(f"AI article generation failed (attempt 2): {e2}", file=sys.stderr)
+            return None
 
     response = response.strip()
     # Strip markdown code fence
@@ -302,36 +364,65 @@ def generate_article(text_provider, topic, material_text, recent_titles):
 
     try:
         data = json.loads(response)
-        title = data.get("title", "").strip()
-        content = data.get("content", "").strip()
-        tags = data.get("tags", [])
-        categories = data.get("categories", [])
-
-        if not title or not content:
-            print("AI response missing title or content", file=sys.stderr)
-            return None
-
-        return {
-            "title": title,
-            "content": content,
-            "tags": tags if isinstance(tags, list) else [],
-            "categories": categories if isinstance(categories, list) else [],
-        }
     except json.JSONDecodeError as e:
-        print(f"Failed to parse AI response as JSON: {e}", file=sys.stderr)
-        print(f"Response: {response[:300]}", file=sys.stderr)
+        # AI sometimes returns unescaped control characters in content.
+        # Try to fix common issues: replace literal control chars, then retry.
+        print(f"JSON parse failed ({e}), attempting repair...", file=sys.stderr)
+        # Remove/escape raw control characters except newline and tab
+        repaired = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', response)
+        try:
+            data = json.loads(repaired)
+        except json.JSONDecodeError:
+            # Last resort: extract fields via regex
+            print("Repair failed, extracting fields via regex...", file=sys.stderr)
+            data = _extract_json_fields(response)
+            if data is None:
+                print(f"Response: {response[:500]}", file=sys.stderr)
+                return None
+
+    title = data.get("title", "").strip()
+    content = data.get("content", "").strip()
+    tags = data.get("tags", [])
+    categories = data.get("categories", [])
+
+    if not title or not content:
+        print("AI response missing title or content", file=sys.stderr)
         return None
+
+    return {
+        "title": title,
+        "content": content,
+        "tags": tags if isinstance(tags, list) else [],
+        "categories": categories if isinstance(categories, list) else [],
+    }
 
 
 # ==================== Image Handling ====================
 
 def download_image(url, output_path):
-    """Download an image from URL to local path."""
+    """Download an image from URL to local path.
+    Validates Content-Type and actual image data to avoid saving HTML
+    error pages or other non-image responses.
+    """
     req = urllib.request.Request(url)
     req.add_header("User-Agent", "BlogRunner/1.0")
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            content_type = resp.headers.get("Content-Type", "").lower()
             data = resp.read()
+        # Reject non-image content types
+        if "image/" not in content_type and "octet-stream" not in content_type:
+            print(f"Image skipped ({url}): not an image (Content-Type: {content_type})", file=sys.stderr)
+            return False
+        # Validate actual image data via PIL
+        try:
+            from io import BytesIO
+            from PIL import Image
+            img = Image.open(BytesIO(data))
+            img.verify()  # verify without loading
+        except Exception:
+            print(f"Image skipped ({url}): invalid image data", file=sys.stderr)
+            return False
         with open(output_path, "wb") as f:
             f.write(data)
         return True
@@ -701,19 +792,38 @@ def main():
 
         try:
             topic_data = json.loads(response)
-            topic = topic_data.get("topic", "").strip()
-            angle = topic_data.get("angle", "").strip()
-            if not topic:
-                print("AI returned empty topic", file=sys.stderr)
-                state["last_run"] = now_dt.strftime("%Y-%m-%dT%H:%M:%S+08:00")
-                d1_client.save_state(state)
-                return 1
-            print(f"Topic selected: {topic} (angle: {angle})")
-        except json.JSONDecodeError as e:
-            print(f"Failed to parse topic JSON: {e}", file=sys.stderr)
+        except json.JSONDecodeError:
+            # Try repairing control characters
+            repaired = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', response)
+            try:
+                topic_data = json.loads(repaired)
+            except json.JSONDecodeError:
+                # Last resort: try to extract topic via regex, or use raw text
+                m = re.search(r'"topic"\s*:\s*"([^"]*)"', response)
+                if m:
+                    topic = m.group(1).strip()
+                    angle = ""
+                    print(f"Topic extracted via regex: {topic}")
+                else:
+                    # Use the raw response as topic (strip code fences, quotes)
+                    topic = response.strip().strip('"`').strip()
+                    angle = ""
+                    if not topic or len(topic) > 200:
+                        print(f"Failed to parse topic, raw response: {response[:300]}", file=sys.stderr)
+                        state["last_run"] = now_dt.strftime("%Y-%m-%dT%H:%M:%S+08:00")
+                        d1_client.save_state(state)
+                        return 1
+                    print(f"Using raw response as topic: {topic}")
+                topic_data = {"topic": topic, "angle": angle}
+
+        topic = topic_data.get("topic", "").strip()
+        angle = topic_data.get("angle", "").strip()
+        if not topic:
+            print("AI returned empty topic", file=sys.stderr)
             state["last_run"] = now_dt.strftime("%Y-%m-%dT%H:%M:%S+08:00")
             d1_client.save_state(state)
             return 1
+        print(f"Topic selected: {topic} (angle: {angle})")
 
         # Use the trending items as material, plus do a deep search
         material_text = items_text
@@ -739,11 +849,10 @@ def main():
     article = generate_article(text_provider, topic, material_text, recent_titles)
     if article is None:
         print("Article generation failed, aborting", file=sys.stderr)
+        # Only update last_run in D1; do NOT write publish-log or git push,
+        # so failed runs leave no trace in the repo.
         state["last_run"] = now_dt.strftime("%Y-%m-%dT%H:%M:%S+08:00")
         d1_client.save_state(state)
-        update_publish_log(topic, "文章生成失败", published=False)
-        if not args.dry_run:
-            git_commit_and_push()
         return 1
 
     print(f"Article generated: {article['title']}")
@@ -787,8 +896,9 @@ def main():
 
         if rc != 0:
             print("create_post.py failed", file=sys.stderr)
-            update_publish_log(article["title"], "文章创建失败", published=False)
-            git_commit_and_push()
+            # Only update last_run; do NOT write publish-log or git push.
+            state["last_run"] = now_dt.strftime("%Y-%m-%dT%H:%M:%S+08:00")
+            d1_client.save_state(state)
             return 1
 
         print(stdout.strip())
@@ -813,17 +923,22 @@ def main():
     else:
         print(f"Warning: post file not found at {post_path}", file=sys.stderr)
 
-    # ===== Step 6: Update Publish Log =====
-    print("\n--- Step 6: Update Publish Log ---")
+    # ===== Step 6: Remove topic from pool (if from pool) =====
+    if source == "pool":
+        print("\n--- Step 6: Remove Topic from Pool ---")
+        remove_topic_from_pool(topic)
+
+    # ===== Step 7: Update Publish Log =====
+    print("\n--- Step 7: Update Publish Log ---")
     summary = article["tags"][0] if article["tags"] else "自动发布"
     update_publish_log(article["title"], summary, published=True)
 
-    # ===== Step 7: Git Commit & Push =====
-    print("\n--- Step 7: Git Commit & Push ---")
+    # ===== Step 8: Git Commit & Push =====
+    print("\n--- Step 8: Git Commit & Push ---")
     git_commit_and_push()
 
-    # ===== Step 8: Update D1 State =====
-    print("\n--- Step 8: Update D1 State ---")
+    # ===== Step 9: Update D1 State =====
+    print("\n--- Step 9: Update D1 State ---")
     state["last_run"] = now_dt.strftime("%Y-%m-%dT%H:%M:%S+08:00")
     state["weekly_count"] = state.get("weekly_count", 0) + 1
     state["stats"]["total_published"] = state.get("stats", {}).get("total_published", 0) + 1

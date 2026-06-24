@@ -69,7 +69,7 @@ class WorkersAIText(TextProvider):
         req.add_header("Content-Type", "application/json")
 
         try:
-            with urllib.request.urlopen(req, timeout=90) as resp:
+            with urllib.request.urlopen(req, timeout=180) as resp:
                 result = json.loads(resp.read().decode("utf-8"))
 
             if result.get("success"):
@@ -111,7 +111,7 @@ class OpenAIText(TextProvider):
         req.add_header("Content-Type", "application/json")
 
         try:
-            with urllib.request.urlopen(req, timeout=90) as resp:
+            with urllib.request.urlopen(req, timeout=180) as resp:
                 result = json.loads(resp.read().decode("utf-8"))
 
             return result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()

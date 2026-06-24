@@ -246,8 +246,10 @@ def main():
                         help='随机种子（用于测试）')
     parser.add_argument('--dry-run', action='store_true',
                         help='只输出结果，不修改选题池（用于测试）')
+    parser.add_argument('--no-remove', action='store_true',
+                        help='选中选题但不从选题池删除（删除由调用方在发布成功后执行）')
     args = parser.parse_args()
-    
+
     # 执行选题
     result_type, content = pick_topic(
         pool_weight=args.pool_weight,
@@ -256,19 +258,19 @@ def main():
         log_path=args.log_path,
         seed=args.seed
     )
-    
+
     # 输出结果
     if result_type == 'pool':
         print(f'RESULT: pool')
         print(f'TOPIC: {content}')
-        
-        # 如果不是 dry-run，从选题池中删除
-        if not args.dry_run:
+
+        # 如果不是 dry-run 且不是 no-remove，从选题池中删除
+        if not args.dry_run and not args.no_remove:
             removed = remove_topic_from_pool(content, args.topics_path)
             print(f'REMOVED: {"true" if removed else "false"}')
         else:
-            print(f'REMOVED: false (dry-run)')
-        
+            print(f'REMOVED: false ({'dry-run' if args.dry_run else 'no-remove'})')
+
         return 0
     else:
         print(f'RESULT: search')
