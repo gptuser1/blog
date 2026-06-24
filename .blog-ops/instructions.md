@@ -117,7 +117,7 @@
 11. 更新 D1 state
 
 ## 文件说明
-- `task-manifest.md`：本文件，架构说明
+- `instructions.md`：本文件，架构说明
 - `publish-log.md`：发布日志，记录每天发布了什么文章，只保留最近 30 条
 - `topics.md`：选题池，想到的主题存这里
 - `config.json`：运行配置（AI 模型、搜索、节奏参数）
