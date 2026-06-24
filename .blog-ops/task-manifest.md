@@ -1,10 +1,18 @@
 # iMagic Blog 自动更新任务说明
 
-这是豆包自动更新博客的任务清单。每次触发时先读这个文件，快速恢复记忆。
+博客自动发布系统，由 GitHub Actions + AI API + Tavily 搜索驱动。
+
+## 架构概览
+
+- **调度**：GitHub Actions，每天 09:00（北京时间）触发
+- **AI**：SiliconFlow / DeepSeek-V4-Flash（thinking 关闭，节省 token）
+- **搜索**：Tavily API（热点发现 + 深度素材 + 图片搜索）
+- **状态**：Cloudflare D1（ocean 库，key=`blog_state`，与 whispers 共享）
+- **部署**：推送到 main 自动触发 Cloudflare Pages 构建
 
 ## ⚠️ 重要提醒（踩过的坑，必须看）
 
-**这些都是之前踩过的坑，一定要重视，不要再犯！**
+**这些都是之前踩过的坑，代码里已经处理，但维护时要重视：**
 
 ### 1. front matter 格式必须正确
 - 必须用 TOML 格式（`+++` 包裹）
@@ -12,25 +20,19 @@
   - 不加引号可能导致时区信息丢失，被当成 UTC 时间，结果就是文章发布时间变成未来的，Hugo 不显示
 - **title 建议用单引号包裹**
   - 如果标题里包含双引号（如 `"强制补水"`），外面一定要用单引号，避免转义问题
-  - 双引号嵌套错误会导致 TOML 解析直接失败，文章不显示
-- 格式错误是导致文章不显示的最常见原因，写完一定要检查
+- 格式错误是导致文章不显示的最常见原因
+- `create_post.py` 已自动处理这些格式问题
 
 ### 2. 日期时间问题
 - date 必须是**当前的北京时间**，不要做额外的时区转换
-- 系统时间已经是北京时间，直接用即可
 - **绝对不能设成未来时间**，Hugo 不会发布未来日期的文章
-- 写完检查一下：这个时间是不是已经过去了？
+- `lint_post.py` 会自动检查未来时间
 
 ### 3. 图片必须下载到本地
 - **绝对不要直接引用外部图片链接**（外链可能失效、有防盗链、加载慢等）
-- 必须用 curl 或 Python requests 下载到本地
-- 保存到 `static/images/` 目录，文章里用相对路径引用（如 `/images/xxx.webp`）
+- 必须下载到 `static/images/` 目录，文章里用相对路径引用（如 `/images/xxx.webp`）
 - 下载后必须优化：分辨率控制 + 转 WebP 格式（质量 80）
-
-### 4. 其他
-- 写完一定要自审，按自审标准逐条检查
-- 不要想当然，不确定的就查
-- 宁可不写，也不要写错
+- `blog_runner.py` 通过 Tavily 图片搜索自动下载，`process_image.py` 自动优化
 
 ---
 
@@ -52,44 +54,23 @@
 
 - 绝对不能写任何个人隐私信息（工作、家庭、财务、健康等）
 - 文章用 TOML front matter：date、draft、title、tags、categories
-- **date 字段必须是当前的北京时间，不要做额外的时区转换**。系统时间已经是北京时间，直接用即可。注意：Hugo 不会发布未来日期的文章，所以时间绝对不能设成未来的，否则文章不会显示。
 - 自审通过后直接发布（draft: false）
 
-**写之前再检查一遍：有没有编造个人细节？有没有杜撰"我的人类朋友"说过的话？如果有，删掉重写。**
+这些写作规范已固化在 `blog_runner.py` 的 system prompt 中。
 
 ## 配图要求
-- **原则上每篇文章都要有 2-3 张配图**，可以根据内容适当增加，不要整篇文章干巴巴的
-- **优先从网络渠道直接获取**：搜索新闻图片、官方图片、公开的摄影作品等真实图片
-- **找不到合适的可以用 AI 生成**：如果网络上实在找不到合适的图，或者对找到的图不满意，可以自己生成配图
-- **图片必须下载到本地保存**，绝对不要直接引用外部图片链接（外链可能失效、有防盗链限制、加载慢等问题）
-  - 下载方法任选：curl 命令、Python requests 库都可以
-  - 下载后保存到 `static/images/` 目录
-- 图片要和文章内容相关，质量要好，不要用模糊或不相关的图
+- **原则上每篇文章都要有 2 张配图**
+- **一期方案**：通过 Tavily 图片搜索获取，下载到本地后优化
+- **二期（计划）**：当 Tavily 找不到合适图时，可用 AI 生成配图补充
+- 图片必须下载到本地保存，绝对不要直接引用外部图片链接
 - 文章里用相对路径引用（比如 `/images/xxx.webp`）
-- **图片文件名要自定义**：用图片内容来命名（比如 `ai-ipo-chart.webp`），如果怕重名可以在最后加时间戳
+- 图片文件名自定义：用图片内容命名，加时间戳避免重名
 
-### 图片优化（必须执行）
-所有图片下载后必须经过优化处理再保存，控制存储空间和流量：
-
-**分辨率控制：**
-- 横向图（宽 > 高）：最大宽度 1200px，高度按比例自适应
-- 纵向图（高 > 宽）：最大高度 1200px，宽度按比例自适应
-- 正方形图：最大边长 1200px
-- 原图已经小于限制的，不用缩放
-
-**格式转换：**
-- 统一转成 **WebP 格式**，质量设为 80（兼顾画质和体积，肉眼基本无差异）
-- WebP 兼容性：Chrome / Firefox / Safari 14+ 均已支持，无需额外 fallback
-- 处理工具任选：ImageMagick（convert）或 Python Pillow 都可以
-- **推荐使用工具脚本**（最简单，直接调用就行，需要先安装 Pillow 依赖：`pip install Pillow`）：
-  ```bash
-  python .blog-ops/scripts/process_image.py 输入图片路径 输出图片.webp
-  ```
-  自动完成：按最大边 1200px 缩放、转 WebP 格式、质量 80、超过 500KB 自动降质量
-
-**最终文件：**
-- 后缀统一用 `.webp`
-- 文件名保持自定义的有意义名称
+### 图片优化（自动执行）
+所有图片下载后经过 `process_image.py` 处理：
+- 按最大边 1200px 等比缩放
+- 转 WebP 格式，质量 80
+- 超过 500KB 自动降质量
 
 ## 选题方向
 参考方向，不是限制，可以写任何值得写的：
@@ -104,180 +85,104 @@
 
 原则：宁可不写，也不要写拿不准的、质量不高的。
 
-**话题多样性**：近3篇的话题尽量不要太过一致，保持内容多样性。比如刚写了AI相关的，接下来尽量换个方向（技术折腾、足球、生活随笔等）。
+**话题多样性**：近3篇的话题尽量不要太过一致，保持内容多样性。
 
 ## 节奏要求
-- 每天上午 9:00 触发检查
-- 每周至少 2 篇
+- 每天 09:00 触发检查（GitHub Actions cron）
+- 每周至少 2 篇，目标 3 篇
 - 周三检查点：到周三还 0 篇，周三必须写一篇
 - 周六检查点：到周六不到 2 篇，周末补齐
-- 尽量均匀分布，不要堆到最后
+- 其他日子概率触发（落后进度时概率更高）
+- 节奏控制逻辑在 `blog_runner.py` 的 `should_publish()` 中
 
-## 自审标准
-写完文章后必须自己审核一遍，全部通过再发布：
-1. 有没有编造个人细节、杜撰"我的人类朋友"的话？→ 有就删掉重写
-2. 有没有涉及隐私信息？→ 有就删掉
-3. **front matter 格式是否正确？** → date 加单引号了吗？title 引号嵌套正确吗？格式错了文章不显示
-4. 事实数据是否准确？→ 不确定的就查，查不到就删掉不写
-5. 话题是否跟最近 3 篇重复？→ 重复就换个方向
-6. 整体质量是否达标？→ 不达标就修改，实在不行就不发
-7. 有没有配图？配图是否合适（清晰、相关）？→ 原则上每篇都要有配图，没配图要说明原因；不合适就换
-8. **图片是否都下载到本地了？** → 绝对不能直接引用外部链接，必须下载到本地
-9. 图片是否经过优化（分辨率控制 + WebP 格式）？→ 没优化就处理一下
-10. **文章发布时间是否正确？** → 是当前北京时间吗？是不是未来时间？不对就改
+## 自动化执行流程
 
-自审全部通过就直接发布（draft: false），有问题自己修改或判断，不需要留草稿等用户。
+`blog_runner.py` 每次执行的步骤：
 
-**自动化检查工具**：
-可以使用格式检查脚本自动检查常见问题（front matter 格式、日期、外链图片等）：
-```bash
-python .blog-ops/scripts/lint_post.py content/posts/文章文件名.md
-```
-也可以检查所有文章：
-```bash
-python .blog-ops/scripts/lint_post.py --all
-```
-能自动检查的项目：front matter 格式是否正确、date 是否加了单引号、日期是不是未来时间、有没有引用外部图片链接、图片文件是否存在、图片是否是 WebP 格式。
-
-## 执行步骤
-1. clone 仓库
-2. 配置 git 用户：Doubao / doubao@example.com
-3. 读 manifest（就是这个文件）
-4. 读 publish-log.md 看最近发布记录
-5. 读 2-3 篇已发布文章，找回风格
-6. 运行选题脚本，获取今天的写作话题：
-   ```bash
-   python .blog-ops/scripts/pick_topic.py
-   ```
-   - 如果输出 `RESULT: pool`，直接用 `TOPIC:` 后面的话题写
-   - 如果输出 `RESULT: search`，按照 `INSTRUCTION:` 后面的指令去搜索找话题
-7. 判断今天要不要写（一般都写，除非实在没合适的话题）
-8. 写文章，800-1500 字
-9. 适当配图：优先从网络搜索合适的图片，2-3张
-    - **必须下载到本地**：用 curl 或 Python requests 下载原图，不要直接引用外部链接
-    - 下载后必须优化处理：按分辨率限制缩放，转 WebP 格式（质量 80）
-    - 自定义文件名，保存到 static/images/，后缀 .webp
-    - 在文章里引用（相对路径，如 /images/xxx.webp）
-10. 自审：按自审标准检查一遍，有问题就修改
-    - 可以用格式检查脚本自动检查常见问题：`python .blog-ops/scripts/lint_post.py content/posts/xxx.md`
-11. 存 content/posts/，文件名英文小写加连字符
-    - **推荐使用工具脚本创建**（自动处理 TOML front matter 格式，避免 date 引号等坑）：
-      ```bash
-      python .blog-ops/scripts/create_post.py \
-        --title "文章标题" \
-        --content "文章正文内容..." \
-        --tags 标签1 标签2 \
-        --categories 分类1
-      ```
-      自动生成 slug，自动处理日期格式（加单引号），自动创建文件
-12. draft: false（自审通过直接发布）
-13. 更新 publish-log.md，记录今天发布了什么；如果记录超过 30 条，删掉最旧的
-14. 没写也记录"今日未更新"
-15. 提交推送，commit message 用英文
+1. 读 D1 state（last_run, week_start, weekly_count）
+2. 节奏判断：今天是否该发（周三/周六检查点 + 概率触发）
+3. 选题：
+   - 70% 走选题池（`pick_topic.py`）
+   - 30% 走 Tavily 热点搜索 → AI 挑选话题
+4. 深挖素材：Tavily advanced 搜索（含 raw_content）
+5. AI 生成文章（DeepSeek-V4-Flash，thinking 关闭）
+   - system prompt 静态（可命中上下文缓存）
+   - user prompt 含选题 + 素材 + 最近 3 篇标题
+   - 输出 JSON：{title, content, tags, categories}
+6. 配图：Tavily 图片搜索 → 下载 → process_image.py 优化
+7. `create_post.py` 生成文章文件
+8. `lint_post.py` 自审
+9. 更新 `publish-log.md`
+10. git commit + push
+11. 更新 D1 state
 
 ## 文件说明
-- task-manifest.md：本文件，任务说明
-- publish-log.md：发布日志，记录每天发布了什么文章，只保留最近 30 条
-- topics.md：选题池，想到的主题存这里
-- requirements.txt：工具脚本依赖列表
+- `task-manifest.md`：本文件，架构说明
+- `publish-log.md`：发布日志，记录每天发布了什么文章，只保留最近 30 条
+- `topics.md`：选题池，想到的主题存这里
+- `config.json`：运行配置（AI 模型、搜索、节奏参数）
+- `requirements.txt`：工具脚本依赖列表
 
 ## 工具脚本
 
-所有脚本都在 `.blog-ops/scripts/` 目录下。
+所有脚本在 `.blog-ops/scripts/` 目录下。
 
-### 1. process_image.py —— 图片处理工具
-**功能**：按最大边等比缩放（默认 1200px）、转 WebP 格式（默认质量 80）、超过 500KB 自动降质量
+### 核心脚本
 
-**用法**：
-```bash
-python .blog-ops/scripts/process_image.py <输入图片路径> <输出图片.webp> [选项]
+| 脚本 | 功能 |
+|------|------|
+| `blog_runner.py` | 主编排脚本，GitHub Actions 调用 |
+| `ai_client.py` | AI 适配器（OpenAI 兼容接口） |
+| `search_client.py` | Tavily 搜索客户端（热点/深度/图片） |
+| `d1_client.py` | D1 状态管理（key=blog_state） |
+
+### 工具脚本
+
+| 脚本 | 功能 |
+|------|------|
+| `create_post.py` | 创建文章（自动处理 TOML front matter） |
+| `lint_post.py` | 格式检查（front matter、日期、图片等） |
+| `pick_topic.py` | 选题工具（选题池 70% / 搜索 30%） |
+| `process_image.py` | 图片优化（缩放 + WebP + 压缩） |
+
+## 配置说明
+
+`config.json` 关键配置：
+
+```json
+{
+  "ai": {
+    "text": {
+      "provider": "openai",
+      "model": "deepseek-ai/DeepSeek-V4-Flash",
+      "base_url": "https://api.siliconflow.cn/v1"
+    }
+  },
+  "search": {
+    "provider": "tavily"
+  },
+  "schedule": {
+    "weekly_min": 2,
+    "weekly_target": 3
+  }
+}
 ```
 
-**选项**：
-- `--max-size`：最大边像素，默认 1200
-- `--quality`：WebP 质量，默认 80
-- `--max-kb`：最大文件大小 KB，默认 500，超过自动降质量
-- `--min-size`：最小边像素，默认 0（不限制）
+## GitHub Secrets
 
-**依赖**：Pillow（`pip install Pillow`）
+工作流需要以下 Secrets：
 
-### 2. create_post.py —— 文章创建工具
-**功能**：自动生成 TOML front matter（date 自动加单引号）、自动生成 slug、创建文章文件
-
-**用法**：
-```bash
-python .blog-ops/scripts/create_post.py --title "文章标题" --content "正文内容" [选项]
-```
-
-**选项**：
-- `--date`：发布时间，格式 `YYYY-MM-DDTHH:MM:SS+08:00`，默认当前北京时间
-- `--tags`：标签列表，空格分隔
-- `--categories`：分类列表，空格分隔
-- `--draft`：设为草稿
-- `--slug`：自定义 URL 别名，默认从标题生成
-- `--output-dir`：输出目录，默认 `content/posts/`
-
-**依赖**：仅标准库
-
-### 3. lint_post.py —— 格式检查/自审工具
-**功能**：自动检查 front matter 格式、date 引号、未来时间、外链图片、图片存在性、图片格式等
-
-**用法**：
-```bash
-# 检查单篇文章
-python .blog-ops/scripts/lint_post.py content/posts/文章文件名.md
-
-# 检查所有文章
-python .blog-ops/scripts/lint_post.py --all
-```
-
-**能自动检查的项目**：
-- front matter 格式是否正确（TOML 格式）
-- date 字段是否加了单引号
-- date 是不是未来时间
-- 有没有引用外部图片链接
-- 引用的图片文件是否存在
-- 图片是否是 WebP 格式
-- 图片文件大小是否超标
-
-**依赖**：仅标准库
-
-### 4. pick_topic.py —— 选题工具
-**功能**：从选题池或实时搜索中加权选择写作话题，规范选题过程，提高选题池利用率
-
-**用法**：
-```bash
-python .blog-ops/scripts/pick_topic.py [选项]
-```
-
-**输出格式**：
-- 情况 A（选题池选中）：
-  ```
-  RESULT: pool
-  TOPIC: 选题标题
-  ```
-- 情况 B（需要搜索）：
-  ```
-  RESULT: search
-  INSTRUCTION: 搜索指令文本
-  ```
-
-**选项**：
-- `--pool-weight`：选题池权重，默认 0.7（70% 概率从选题池选）
-- `--diversity-count`：考虑最近几篇的话题多样性，默认 3
-- `--topics-path`：选题池文件路径，默认 `.blog-ops/topics.md`
-- `--log-path`：发布日志路径，默认 `.blog-ops/publish-log.md`
-- `--seed`：随机种子（用于测试）
-
-**依赖**：仅标准库
-
-## 审核机制
-AI 自审自发布，不需要用户审核。
-
-自审标准见上文「自审标准」章节。用户不定期可以上来看看，如果觉得哪篇不好，随时可以删掉或修改。
+| Secret | 说明 |
+|--------|------|
+| `GH_TOKEN` | GitHub PAT（需 repo + workflow 权限） |
+| `OPENAI_API_KEY` | SiliconFlow API key |
+| `TAVILY_API_KEY` | Tavily 搜索 API key |
+| `D1_API_URL` | D1 REST API 地址 |
+| `D1_API_KEY` | D1 REST API key |
 
 ## 注意事项
-- 遇到问题记到 publish-log.md 里
 - 不修改已发布文章，只新增
 - 不随便删除东西
-- 所有状态靠文件记录，不靠即时回复
+- 状态靠 D1 和文件记录
+- AI thinking 模式已关闭，节省 token
+- system prompt 保持静态，命中 DeepSeek 上下文缓存
