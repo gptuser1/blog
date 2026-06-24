@@ -268,7 +268,9 @@ def build_article_prompt(topic, material_text, recent_titles):
 5. Markdown 格式
 
 输出格式（严格JSON，不要输出其他内容）：
-{"title": "文章标题", "content": "Markdown正文", "tags": ["标签1", "标签2"], "categories": ["分类"]}"""
+{"title": "文章标题", "slug": "english-kebab-case-slug", "content": "Markdown正文", "tags": ["标签1", "标签2"], "categories": ["分类"]}
+
+slug 要求：英文小写、单词用连字符分隔、不超过 50 字符，概括文章主题。例如 "ai-scientist-paradox"、"world-cup-messi-hat-trick"。"""
 
     recent_text = "、".join(recent_titles) if recent_titles else "（暂无）"
     now_str = now_beijing().strftime("%Y-%m-%d %H:%M")
@@ -298,6 +300,11 @@ def _extract_json_fields(text):
     m = re.search(r'"title"\s*:\s*"((?:[^"\\]|\\.)*)"', text)
     if m:
         result["title"] = m.group(1).encode().decode("unicode_escape", errors="replace")
+
+    # slug: "slug": "..."
+    m = re.search(r'"slug"\s*:\s*"((?:[^"\\]|\\.)*)"', text)
+    if m:
+        result["slug"] = m.group(1).encode().decode("unicode_escape", errors="replace")
 
     # content: "content": "..." up to "tags" or "categories" or end
     m = re.search(r'"content"\s*:\s*"((?:[^"\\]|\\.)*)"', text, re.DOTALL)
@@ -384,6 +391,7 @@ def generate_article(text_provider, topic, material_text, recent_titles):
     content = data.get("content", "").strip()
     tags = data.get("tags", [])
     categories = data.get("categories", [])
+    slug = sanitize_slug(data.get("slug", ""))
 
     if not title or not content:
         print("AI response missing title or content", file=sys.stderr)
@@ -391,10 +399,26 @@ def generate_article(text_provider, topic, material_text, recent_titles):
 
     return {
         "title": title,
+        "slug": slug,
         "content": content,
         "tags": tags if isinstance(tags, list) else [],
         "categories": categories if isinstance(categories, list) else [],
     }
+
+
+def sanitize_slug(raw_slug):
+    """Sanitize AI-provided slug to ensure it's valid English kebab-case.
+    If empty or contains non-ASCII, fall back to a timestamp-based slug.
+    """
+    if not raw_slug:
+        return f"post-{now_beijing().strftime('%Y%m%d%H%M%S')}"
+    # Only keep a-z, 0-9, and hyphens
+    slug = re.sub(r'[^a-z0-9-]+', '-', raw_slug.lower()).strip('-')
+    # Collapse multiple hyphens
+    slug = re.sub(r'-+', '-', slug)
+    if not slug or len(slug) < 3:
+        return f"post-{now_beijing().strftime('%Y%m%d%H%M%S')}"
+    return slug[:50]
 
 
 # ==================== Image Handling ====================
@@ -431,13 +455,17 @@ def download_image(url, output_path):
         return False
 
 
-def find_and_download_images(search_client, topic, title, count=2):
+def find_and_download_images(search_client, topic, title, count=2, slug=None):
     """
     Search images via Tavily, download and optimize them.
     Returns list of relative paths like /images/xxx.webp.
+    Image filenames use the article slug (English kebab-case).
     """
     # Build search query from topic/title
     query = title if title else topic
+    # Use provided slug for filename, or generate a sanitized one
+    if not slug:
+        slug = sanitize_slug(re.sub(r'[^a-z0-9]+', '-', query.lower()))
 
     print(f"Searching images for: {query}")
     try:
@@ -464,10 +492,6 @@ def find_and_download_images(search_client, topic, title, count=2):
         if not img_url or not img_url.startswith("http"):
             continue
 
-        # Generate filename from query
-        slug = re.sub(r'[^a-z0-9\u4e00-\u9fff]+', '-', query.lower()).strip('-')[:20]
-        if not slug:
-            slug = "img"
         raw_path = os.path.join(IMAGES_DIR, f"{slug}-{timestamp}-{i+1}.raw")
         webp_path = os.path.join(IMAGES_DIR, f"{slug}-{timestamp}-{i+1}.webp")
 
@@ -856,6 +880,7 @@ def main():
         return 1
 
     print(f"Article generated: {article['title']}")
+    print(f"  Slug: {article['slug']}")
     print(f"  Tags: {article['tags']}")
     print(f"  Categories: {article['categories']}")
     print(f"  Content length: {len(article['content'])} chars")
@@ -864,7 +889,7 @@ def main():
     print("\n--- Step 3: Image Search ---")
     target_images = config.get("writing", {}).get("target_images", 2)
     image_paths = find_and_download_images(
-        search_client, topic, article["title"], count=target_images
+        search_client, topic, article["title"], count=target_images, slug=article["slug"]
     )
     print(f"Downloaded {len(image_paths)} images")
 
@@ -890,6 +915,7 @@ def main():
             sys.executable,
             os.path.join(SCRIPT_DIR, "create_post.py"),
             "--title", article["title"],
+            "--slug", article["slug"],
             "--content", article["content"],
             "--tags"] + article["tags"] + ["--categories"] + article["categories"]
         )
@@ -907,9 +933,8 @@ def main():
 
     # ===== Step 5: Lint =====
     print("\n--- Step 5: Lint ---")
-    # Find the created file
-    slug = re.sub(r'[^a-z0-9\u4e00-\u9fff]+', '-', article["title"].lower()).strip('-')
-    post_path = os.path.join(POSTS_DIR, f"{slug}.md")
+    # Find the created file using the article slug
+    post_path = os.path.join(POSTS_DIR, f"{article['slug']}.md")
 
     if os.path.exists(post_path):
         stdout, rc = run_script([

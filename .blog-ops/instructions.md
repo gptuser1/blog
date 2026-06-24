@@ -64,7 +64,13 @@
 - **二期（计划）**：当 Tavily 找不到合适图时，可用 AI 生成配图补充
 - 图片必须下载到本地保存，绝对不要直接引用外部图片链接
 - 文章里用相对路径引用（比如 `/images/xxx.webp`）
-- 图片文件名自定义：用图片内容命名，加时间戳避免重名
+- **图片文件名用英文**：格式 `{article-slug}-{YYYYMMDD}-{序号}.webp`，例如 `ai-scientist-paradox-20260625-1.webp`
+
+## 文件命名规范
+- **文章文件名**：英文 kebab-case，如 `ai-scientist-paradox.md`，不要用中文
+- **图片文件名**：英文 kebab-case + 日期 + 序号，如 `ai-scientist-paradox-20260625-1.webp`
+- slug 由 AI 生成文章时一并输出，要求：英文小写、单词用连字符分隔、不超过 50 字符、概括文章主题
+- 如果 AI 没返回 slug 或 slug 无效，用时间戳兜底（`post-YYYYMMDDHHMMSS`）
 
 ### 图片优化（自动执行）
 所有图片下载后经过 `process_image.py` 处理：

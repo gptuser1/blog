@@ -17,15 +17,13 @@ import re
 from datetime import datetime, timezone, timedelta
 
 def slugify(title):
-    """从标题生成 slug：英文小写加连字符，中文转拼音或直接用英文"""
-    # 简单处理：转小写，空格和特殊字符转连字符
+    """从标题生成 slug：英文小写加连字符。
+    如果标题含中文，返回 None（调用方应通过 --slug 传入 AI 生成的英文 slug）。
+    """
     slug = title.lower()
-    slug = re.sub(r'[^a-z0-9\u4e00-\u9fff]+', '-', slug)
-    slug = slug.strip('-')
-    # 如果全是中文，给个默认前缀
-    if re.match(r'^[\u4e00-\u9fff]+$', slug):
-        # 中文标题的话，还是返回原 slug（Hugo 支持中文 URL）
-        pass
+    slug = re.sub(r'[^a-z0-9]+', '-', slug).strip('-')
+    if not slug:
+        return None
     return slug
 
 def create_post(title, content, date=None, tags=None, categories=None, 
@@ -53,6 +51,11 @@ def create_post(title, content, date=None, tags=None, categories=None,
     # 处理 slug
     if slug is None:
         slug = slugify(title)
+    if not slug:
+        # 标题全是中文等非 ASCII 字符，且未提供 slug，用时间戳兜底
+        from datetime import datetime, timezone, timedelta
+        tz = timezone(timedelta(hours=8))
+        slug = f"post-{datetime.now(tz).strftime('%Y%m%d%H%M%S')}"
     
     # 处理标签和分类
     if tags is None:
