@@ -53,7 +53,6 @@ def create_post(title, content, date=None, tags=None, categories=None,
         slug = slugify(title)
     if not slug:
         # 标题全是中文等非 ASCII 字符，且未提供 slug，用时间戳兜底
-        from datetime import datetime, timezone, timedelta
         tz = timezone(timedelta(hours=8))
         slug = f"post-{datetime.now(tz).strftime('%Y%m%d%H%M%S')}"
     
