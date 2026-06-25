@@ -440,11 +440,11 @@ def generate_image_cf(prompt, output_path, image_config):
     Returns True on success, False on failure.
     """
     account_id = os.environ.get(image_config.get("account_id_env", "CF_IMAGE_ACCOUNT_ID"), "")
-    api_key = os.environ.get(image_config.get("api_key_env", "CF_IMAGE_API_KEY"), "")
+    api_token = os.environ.get(image_config.get("api_token_env", "CF_IMAGE_API_TOKEN"), "")
     model = image_config.get("model", "@cf/black-forest-labs/flux-2-klein-4b")
 
-    if not account_id or not api_key:
-        print("CF image gen: missing CF_IMAGE_ACCOUNT_ID or CF_IMAGE_API_KEY", file=sys.stderr)
+    if not account_id or not api_token:
+        print("CF image gen: missing CF_IMAGE_ACCOUNT_ID or CF_IMAGE_API_TOKEN", file=sys.stderr)
         return False
 
     url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{model}"
@@ -460,7 +460,7 @@ def generate_image_cf(prompt, output_path, image_config):
     body += f"--{boundary}--\r\n".encode()
 
     req = urllib.request.Request(url, data=body, method="POST")
-    req.add_header("Authorization", f"Bearer {api_key}")
+    req.add_header("Authorization", f"Bearer {api_token}")
     req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
 
     try:
