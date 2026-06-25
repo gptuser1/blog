@@ -47,8 +47,8 @@ jobs:
           TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
           D1_API_URL: ${{ secrets.D1_API_URL }}
           D1_API_KEY: ${{ secrets.D1_API_KEY }}
-          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
-          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          CF_IMAGE_ACCOUNT_ID: ${{ secrets.CF_IMAGE_ACCOUNT_ID }}
+          CF_IMAGE_API_KEY: ${{ secrets.CF_IMAGE_API_KEY }}
         run: |
           FORCE_FLAG=""
           if [ "${{ github.event.inputs.force }}" = "true" ]; then

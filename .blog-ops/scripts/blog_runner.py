@@ -439,12 +439,12 @@ def generate_image_cf(prompt, output_path, image_config):
     Uses multipart/form-data as required by the model API.
     Returns True on success, False on failure.
     """
-    account_id = os.environ.get(image_config.get("account_id_env", "CF_ACCOUNT_ID"), "")
-    api_key = os.environ.get(image_config.get("api_key_env", "CF_API_KEY"), "")
+    account_id = os.environ.get(image_config.get("account_id_env", "CF_IMAGE_ACCOUNT_ID"), "")
+    api_key = os.environ.get(image_config.get("api_key_env", "CF_IMAGE_API_KEY"), "")
     model = image_config.get("model", "@cf/black-forest-labs/flux-2-klein-4b")
 
     if not account_id or not api_key:
-        print("CF image gen: missing CF_ACCOUNT_ID or CF_API_KEY", file=sys.stderr)
+        print("CF image gen: missing CF_IMAGE_ACCOUNT_ID or CF_IMAGE_API_KEY", file=sys.stderr)
         return False
 
     url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{model}"
