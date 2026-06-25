@@ -32,7 +32,7 @@ from datetime import datetime, timezone, timedelta
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, SCRIPT_DIR)
 
-from ai_client import create_text_provider
+from ai_client import create_text_provider, merge_usage_into_state
 from d1_client import D1Client
 from search_client import TavilyClient
 
@@ -967,8 +967,16 @@ def main():
     state["last_run"] = now_dt.strftime("%Y-%m-%dT%H:%M:%S+08:00")
     state["weekly_count"] = state.get("weekly_count", 0) + 1
     state["stats"]["total_published"] = state.get("stats", {}).get("total_published", 0) + 1
+    # Record token usage stats into state before saving
+    merge_usage_into_state(state, text_provider.usage_total,
+                           now_dt.strftime("%Y-%m-%dT%H:%M:%S+08:00"))
     d1_client.save_state(state)
     print(f"State updated: weekly_count={state['weekly_count']}, total={state['stats']['total_published']}")
+    if text_provider.usage_total["total"] > 0:
+        print(f"Token usage this run: prompt={text_provider.usage_total['prompt']} "
+              f"completion={text_provider.usage_total['completion']} "
+              f"total={text_provider.usage_total['total']} "
+              f"cache_hit={text_provider.usage_total['cache_hit']}")
 
     print("\n=== Blog Runner completed successfully ===")
     return 0
