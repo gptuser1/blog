@@ -60,8 +60,10 @@
 
 ## 配图要求
 - **原则上每篇文章都要有 2 张配图**
-- **一期方案**：通过 Tavily 图片搜索获取，下载到本地后优化
-- **二期（计划）**：当 Tavily 找不到合适图时，可用 AI 生成配图补充
+- **配图流程（搜索优先，生成为辅）**：
+  1. 优先通过 Tavily 图片搜索获取真实图片（新闻图、官方图、公开摄影作品等），下载到本地后优化
+  2. 当 Tavily 搜索结果不足（数量不够或下载失败）时，用 CF Workers AI（flux-2-klein-4b）生成配图补充
+  3. AI 生成时优先使用文章生成阶段输出的 `image_prompts`（英文具象场景描述），无则用 slug 兜底
 - 图片必须下载到本地保存，绝对不要直接引用外部图片链接
 - 文章里用相对路径引用（比如 `/images/xxx.webp`）
 - **图片文件名用英文**：格式 `{article-slug}-{YYYYMMDD}-{序号}.webp`，例如 `ai-scientist-paradox-20260625-1.webp`
@@ -115,7 +117,7 @@
    - system prompt 静态（可命中上下文缓存）
    - user prompt 含选题 + 素材 + 最近 3 篇标题
    - 输出 JSON：{title, content, tags, categories}
-6. 配图：Tavily 图片搜索 → 下载 → process_image.py 优化
+6. 配图：Tavily 图片搜索优先 → 不足时 CF Workers AI 生成补充 → process_image.py 优化
 7. `create_post.py` 生成文章文件
 8. `lint_post.py` 自审
 9. 更新 `publish-log.md`

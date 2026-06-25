@@ -8,7 +8,7 @@ Handles:
 2. Pick a topic (pool 70% / Tavily search 30%)
 3. Deep search for writing material via Tavily
 4. Generate article via AI (DeepSeek-V4-Flash, thinking disabled)
-5. Find images via Tavily, download and optimize
+5. Images: Tavily search first, AI generation (CF Workers AI) as fallback
 6. Create post, lint, update publish-log
 7. Git commit and push
 8. Update D1 state
@@ -278,7 +278,7 @@ image_prompts 要求：2条英文图片描述，用于 AI 生成配图。要求�
 1. 用具象名词描述画面（物体、场景、人物动作），4B 模型对具象名词响应好
 2. 包含场景、光线、氛围、画风描述
 3. 不要用抽象形容词，要描述具体可见的画面
-4. 例如："A cozy coffee shop interior with warm amber lighting, wooden tables, steam rising from a latte cup, rain outside foggy window. Art style: digital illustration, warm tones, soft lighting.""""
+4. 例如："A cozy coffee shop interior with warm amber lighting, wooden tables, steam rising from a latte cup, rain outside foggy window. Art style: digital illustration, warm tones, soft lighting.\""""
 
     recent_text = "、".join(recent_titles) if recent_titles else "（暂无）"
     now_str = now_beijing().strftime("%Y-%m-%d %H:%M")
@@ -433,6 +433,99 @@ def sanitize_slug(raw_slug):
 
 # ==================== Image Handling ====================
 
+def download_image(url, output_path):
+    """Download an image from URL to local path.
+    Validates Content-Type and actual image data to avoid saving HTML
+    error pages or other non-image responses.
+    """
+    req = urllib.request.Request(url)
+    req.add_header("User-Agent", "BlogRunner/1.0")
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            content_type = resp.headers.get("Content-Type", "").lower()
+            data = resp.read()
+        # Reject non-image content types
+        if "image/" not in content_type and "octet-stream" not in content_type:
+            print(f"Image skipped ({url}): not an image (Content-Type: {content_type})", file=sys.stderr)
+            return False
+        # Validate actual image data via PIL
+        try:
+            from io import BytesIO
+            from PIL import Image
+            img = Image.open(BytesIO(data))
+            img.verify()  # verify without loading
+        except Exception:
+            print(f"Image skipped ({url}): invalid image data", file=sys.stderr)
+            return False
+        with open(output_path, "wb") as f:
+            f.write(data)
+        return True
+    except (urllib.error.URLError, OSError) as e:
+        print(f"Image download failed ({url}): {e}", file=sys.stderr)
+        return False
+
+
+def find_and_download_images(search_client, query, count, slug, start_index=0):
+    """
+    Search images via Tavily, download and optimize them.
+    Returns list of relative paths like /images/xxx.webp.
+    start_index is used for filename numbering when mixing search + generated.
+    """
+    if not slug:
+        slug = sanitize_slug(re.sub(r'[^a-z0-9]+', '-', query.lower()))
+
+    print(f"Searching images for: {query}")
+    try:
+        images = search_client.search_images(query, max_results=count + 2)
+    except Exception as e:
+        print(f"Image search failed: {e}", file=sys.stderr)
+        return []
+
+    if not images:
+        print("No images found from search", file=sys.stderr)
+        return []
+
+    os.makedirs(IMAGES_DIR, exist_ok=True)
+    downloaded = []
+    timestamp = now_beijing().strftime("%Y%m%d")
+    seq = start_index
+
+    for img in images:
+        if len(downloaded) >= count:
+            break
+
+        img_url = img.get("url", "") if isinstance(img, dict) else str(img)
+        if not img_url or not img_url.startswith("http"):
+            continue
+
+        raw_path = os.path.join(IMAGES_DIR, f"{slug}-{timestamp}-{seq+1}.raw")
+        webp_path = os.path.join(IMAGES_DIR, f"{slug}-{timestamp}-{seq+1}.webp")
+
+        if not download_image(img_url, raw_path):
+            continue
+
+        # Optimize: resize + convert to WebP
+        stdout, rc = run_script([
+            sys.executable,
+            os.path.join(SCRIPT_DIR, "process_image.py"),
+            raw_path, webp_path
+        ])
+
+        if rc == 0 and os.path.exists(webp_path):
+            rel_path = f"/images/{slug}-{timestamp}-{seq+1}.webp"
+            downloaded.append(rel_path)
+            print(f"  Image saved (search): {rel_path}")
+        else:
+            print(f"  Image optimization failed for {raw_path}", file=sys.stderr)
+
+        # Clean up raw file
+        if os.path.exists(raw_path):
+            os.remove(raw_path)
+        seq += 1
+
+    return downloaded
+
+
 def generate_image_cf(prompt, output_path, image_config):
     """Generate an image via Cloudflare Workers AI (flux-2-klein-4b).
 
@@ -496,58 +589,83 @@ def build_fallback_image_prompt(slug):
             f"soft lighting, detailed rendering, no text.")
 
 
-def generate_images(image_config, article, count=2):
-    """Generate images via Cloudflare Workers AI and optimize them.
-    Uses AI-provided image_prompts, falls back to slug-based prompt.
+def generate_image_single(image_config, prompt, slug, seq):
+    """Generate one image via CF Workers AI, optimize to WebP.
+    Returns relative path like /images/xxx.webp, or None on failure.
+    """
+    os.makedirs(IMAGES_DIR, exist_ok=True)
+    timestamp = now_beijing().strftime("%Y%m%d")
+    raw_path = os.path.join(IMAGES_DIR, f"{slug}-{timestamp}-{seq+1}.raw")
+    webp_path = os.path.join(IMAGES_DIR, f"{slug}-{timestamp}-{seq+1}.webp")
+
+    if not generate_image_cf(prompt, raw_path, image_config):
+        return None
+
+    # Optimize: resize + convert to WebP
+    stdout, rc = run_script([
+        sys.executable,
+        os.path.join(SCRIPT_DIR, "process_image.py"),
+        raw_path, webp_path
+    ])
+
+    rel_path = None
+    if rc == 0 and os.path.exists(webp_path):
+        rel_path = f"/images/{slug}-{timestamp}-{seq+1}.webp"
+        print(f"  Image saved (generated): {rel_path}")
+    else:
+        print(f"  Image optimization failed for {raw_path}", file=sys.stderr)
+
+    # Clean up raw file
+    if os.path.exists(raw_path):
+        os.remove(raw_path)
+    return rel_path
+
+
+def fetch_images_hybrid(search_client, image_config, article, topic, count=2):
+    """Fetch images: search via Tavily first, generate via AI to fill the gap.
+
+    Follows the original design (task-manifest.md):
+      - Prefer real images from the web (news photos, official images, etc.)
+      - Only generate via AI when search can't provide enough suitable images
+
     Returns list of relative paths like /images/xxx.webp.
     """
     slug = article.get("slug", "")
+    title = article.get("title", "")
     image_prompts = article.get("image_prompts", [])
 
-    # Build prompt list: use AI prompts, fill remaining with fallback
-    prompts = []
-    for i in range(count):
-        if i < len(image_prompts) and image_prompts[i]:
-            prompts.append(image_prompts[i])
-        else:
-            prompts.append(build_fallback_image_prompt(slug))
+    # Step 1: search via Tavily (priority)
+    search_query = title if title else topic
+    print(f"\nSearching images (priority) for: {search_query}")
+    image_paths = find_and_download_images(
+        search_client, search_query, count, slug, start_index=0
+    )
+    print(f"Searched: got {len(image_paths)}/{count} images")
 
-    os.makedirs(IMAGES_DIR, exist_ok=True)
-    generated = []
-    timestamp = now_beijing().strftime("%Y%m%d")
+    # Step 2: if not enough, generate the rest via AI (fallback)
+    if len(image_paths) < count:
+        needed = count - len(image_paths)
+        print(f"Not enough from search, generating {needed} via AI as fallback...")
 
-    for i, prompt in enumerate(prompts):
-        if len(generated) >= count:
-            break
+        # Build prompts for the missing slots: prefer AI-provided image_prompts,
+        # fall back to slug-based prompt.
+        prompts = []
+        for i in range(needed):
+            idx = len(image_paths) + i  # align with the next sequence slot
+            if idx < len(image_prompts) and image_prompts[idx]:
+                prompts.append(image_prompts[idx])
+            else:
+                prompts.append(build_fallback_image_prompt(slug))
 
-        print(f"Generating image {i+1}/{count} via CF Workers AI...")
-        print(f"  Prompt: {prompt[:100]}...")
+        for i, prompt in enumerate(prompts):
+            seq = len(image_paths)  # next sequence number
+            print(f"Generating image {len(image_paths)+1}/{count} via CF Workers AI...")
+            print(f"  Prompt: {prompt[:100]}...")
+            rel_path = generate_image_single(image_config, prompt, slug, seq)
+            if rel_path:
+                image_paths.append(rel_path)
 
-        raw_path = os.path.join(IMAGES_DIR, f"{slug}-{timestamp}-{i+1}.raw")
-        webp_path = os.path.join(IMAGES_DIR, f"{slug}-{timestamp}-{i+1}.webp")
-
-        if not generate_image_cf(prompt, raw_path, image_config):
-            continue
-
-        # Optimize: resize + convert to WebP
-        stdout, rc = run_script([
-            sys.executable,
-            os.path.join(SCRIPT_DIR, "process_image.py"),
-            raw_path, webp_path
-        ])
-
-        if rc == 0 and os.path.exists(webp_path):
-            rel_path = f"/images/{slug}-{timestamp}-{i+1}.webp"
-            generated.append(rel_path)
-            print(f"  Image saved: {rel_path}")
-        else:
-            print(f"  Image optimization failed for {raw_path}", file=sys.stderr)
-
-        # Clean up raw file
-        if os.path.exists(raw_path):
-            os.remove(raw_path)
-
-    return generated
+    return image_paths
 
 
 def insert_images_into_content(content, image_paths):
@@ -917,13 +1035,13 @@ def main():
     print(f"  Content length: {len(article['content'])} chars")
 
     # ===== Step 3: Images =====
-    print("\n--- Step 3: Image Generation (CF Workers AI) ---")
+    print("\n--- Step 3: Images (Tavily search first, AI generation as fallback) ---")
     target_images = config.get("writing", {}).get("target_images", 2)
     image_config = config.get("ai", {}).get("image", {})
-    image_paths = generate_images(
-        image_config, article, count=target_images
+    image_paths = fetch_images_hybrid(
+        search_client, image_config, article, topic, count=target_images
     )
-    print(f"Generated {len(image_paths)} images")
+    print(f"Got {len(image_paths)} images (search + generation)")
 
     # Insert images into content
     article["content"] = insert_images_into_content(article["content"], image_paths)
