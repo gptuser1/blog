@@ -18,6 +18,7 @@ Usage:
 """
 
 import argparse
+import base64
 import json
 import os
 import re
@@ -26,6 +27,7 @@ import sys
 import random
 import urllib.request
 import urllib.error
+import uuid
 from datetime import datetime, timezone, timedelta
 
 # Add scripts directory to path
@@ -268,9 +270,15 @@ def build_article_prompt(topic, material_text, recent_titles):
 5. Markdown 格式
 
 输出格式（严格JSON，不要输出其他内容）：
-{"title": "文章标题", "slug": "english-kebab-case-slug", "content": "Markdown正文", "tags": ["标签1", "标签2"], "categories": ["分类"]}
+{"title": "文章标题", "slug": "english-kebab-case-slug", "content": "Markdown正文", "tags": ["标签1", "标签2"], "categories": ["分类"], "image_prompts": ["英文图片描述1", "英文图片描述2"]}
 
-slug 要求：英文小写、单词用连字符分隔、不超过 50 字符，概括文章主题。例如 "ai-scientist-paradox"、"world-cup-messi-hat-trick"。"""
+slug 要求：英文小写、单词用连字符分隔、不超过 50 字符，概括文章主题。例如 "ai-scientist-paradox"、"world-cup-messi-hat-trick"。
+
+image_prompts 要求：2条英文图片描述，用于 AI 生成配图。要求：
+1. 用具象名词描述画面（物体、场景、人物动作），4B 模型对具象名词响应好
+2. 包含场景、光线、氛围、画风描述
+3. 不要用抽象形容词，要描述具体可见的画面
+4. 例如："A cozy coffee shop interior with warm amber lighting, wooden tables, steam rising from a latte cup, rain outside foggy window. Art style: digital illustration, warm tones, soft lighting.""""
 
     recent_text = "、".join(recent_titles) if recent_titles else "（暂无）"
     now_str = now_beijing().strftime("%Y-%m-%d %H:%M")
@@ -392,6 +400,7 @@ def generate_article(text_provider, topic, material_text, recent_titles):
     tags = data.get("tags", [])
     categories = data.get("categories", [])
     slug = sanitize_slug(data.get("slug", ""))
+    image_prompts = data.get("image_prompts", [])
 
     if not title or not content:
         print("AI response missing title or content", file=sys.stderr)
@@ -403,6 +412,7 @@ def generate_article(text_provider, topic, material_text, recent_titles):
         "content": content,
         "tags": tags if isinstance(tags, list) else [],
         "categories": categories if isinstance(categories, list) else [],
+        "image_prompts": image_prompts if isinstance(image_prompts, list) else [],
     }
 
 
@@ -423,79 +433,100 @@ def sanitize_slug(raw_slug):
 
 # ==================== Image Handling ====================
 
-def download_image(url, output_path):
-    """Download an image from URL to local path.
-    Validates Content-Type and actual image data to avoid saving HTML
-    error pages or other non-image responses.
+def generate_image_cf(prompt, output_path, image_config):
+    """Generate an image via Cloudflare Workers AI (flux-2-klein-4b).
+
+    Uses multipart/form-data as required by the model API.
+    Returns True on success, False on failure.
     """
-    req = urllib.request.Request(url)
-    req.add_header("User-Agent", "BlogRunner/1.0")
+    account_id = os.environ.get(image_config.get("account_id_env", "CF_ACCOUNT_ID"), "")
+    api_key = os.environ.get(image_config.get("api_key_env", "CF_API_KEY"), "")
+    model = image_config.get("model", "@cf/black-forest-labs/flux-2-klein-4b")
+
+    if not account_id or not api_key:
+        print("CF image gen: missing CF_ACCOUNT_ID or CF_API_KEY", file=sys.stderr)
+        return False
+
+    url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{model}"
+
+    # Build multipart/form-data body
+    boundary = uuid.uuid4().hex
+    fields = {"prompt": prompt, "steps": "25", "width": "1024", "height": "768"}
+    body = b""
+    for name, value in fields.items():
+        body += f"--{boundary}\r\n".encode()
+        body += f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode()
+        body += f"{value}\r\n".encode()
+    body += f"--{boundary}--\r\n".encode()
+
+    req = urllib.request.Request(url, data=body, method="POST")
+    req.add_header("Authorization", f"Bearer {api_key}")
+    req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
+
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            content_type = resp.headers.get("Content-Type", "").lower()
-            data = resp.read()
-        # Reject non-image content types
-        if "image/" not in content_type and "octet-stream" not in content_type:
-            print(f"Image skipped ({url}): not an image (Content-Type: {content_type})", file=sys.stderr)
+        with urllib.request.urlopen(req, timeout=120) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+
+        if result.get("success"):
+            image_b64 = result.get("result", {}).get("image", "")
+            if image_b64:
+                image_data = base64.b64decode(image_b64)
+                with open(output_path, "wb") as f:
+                    f.write(image_data)
+                return True
+            print("CF image gen: empty image in response", file=sys.stderr)
             return False
-        # Validate actual image data via PIL
-        try:
-            from io import BytesIO
-            from PIL import Image
-            img = Image.open(BytesIO(data))
-            img.verify()  # verify without loading
-        except Exception:
-            print(f"Image skipped ({url}): invalid image data", file=sys.stderr)
-            return False
-        with open(output_path, "wb") as f:
-            f.write(data)
-        return True
-    except (urllib.error.URLError, OSError) as e:
-        print(f"Image download failed ({url}): {e}", file=sys.stderr)
+
+        errors = result.get("errors", [])
+        err_msg = errors[0].get("message", "unknown") if errors else "unknown"
+        print(f"CF image gen error: {err_msg}", file=sys.stderr)
+        return False
+    except Exception as e:
+        print(f"CF image gen failed: {e}", file=sys.stderr)
         return False
 
 
-def find_and_download_images(search_client, topic, title, count=2, slug=None):
+def build_fallback_image_prompt(slug):
+    """Build a simple image prompt from slug when AI didn't provide image_prompts.
+    4B model responds well to concrete nouns, weak on abstract adjectives.
     """
-    Search images via Tavily, download and optimize them.
+    phrase = slug.replace("-", " ")
+    return (f"{phrase}. Concept illustration with relevant objects and scene. "
+            f"Art style: digital illustration, modern, warm color palette, "
+            f"soft lighting, detailed rendering, no text.")
+
+
+def generate_images(image_config, article, count=2):
+    """Generate images via Cloudflare Workers AI and optimize them.
+    Uses AI-provided image_prompts, falls back to slug-based prompt.
     Returns list of relative paths like /images/xxx.webp.
-    Image filenames use the article slug (English kebab-case).
     """
-    # Build search query from topic/title
-    query = title if title else topic
-    # Use provided slug for filename, or generate a sanitized one
-    if not slug:
-        slug = sanitize_slug(re.sub(r'[^a-z0-9]+', '-', query.lower()))
+    slug = article.get("slug", "")
+    image_prompts = article.get("image_prompts", [])
 
-    print(f"Searching images for: {query}")
-    try:
-        images = search_client.search_images(query, max_results=count + 2)
-    except Exception as e:
-        print(f"Image search failed: {e}", file=sys.stderr)
-        return []
+    # Build prompt list: use AI prompts, fill remaining with fallback
+    prompts = []
+    for i in range(count):
+        if i < len(image_prompts) and image_prompts[i]:
+            prompts.append(image_prompts[i])
+        else:
+            prompts.append(build_fallback_image_prompt(slug))
 
-    if not images:
-        print("No images found", file=sys.stderr)
-        return []
-
-    # Ensure images dir exists
     os.makedirs(IMAGES_DIR, exist_ok=True)
-
-    downloaded = []
+    generated = []
     timestamp = now_beijing().strftime("%Y%m%d")
 
-    for i, img in enumerate(images):
-        if len(downloaded) >= count:
+    for i, prompt in enumerate(prompts):
+        if len(generated) >= count:
             break
 
-        img_url = img.get("url", "") if isinstance(img, dict) else str(img)
-        if not img_url or not img_url.startswith("http"):
-            continue
+        print(f"Generating image {i+1}/{count} via CF Workers AI...")
+        print(f"  Prompt: {prompt[:100]}...")
 
         raw_path = os.path.join(IMAGES_DIR, f"{slug}-{timestamp}-{i+1}.raw")
         webp_path = os.path.join(IMAGES_DIR, f"{slug}-{timestamp}-{i+1}.webp")
 
-        if not download_image(img_url, raw_path):
+        if not generate_image_cf(prompt, raw_path, image_config):
             continue
 
         # Optimize: resize + convert to WebP
@@ -507,16 +538,16 @@ def find_and_download_images(search_client, topic, title, count=2, slug=None):
 
         if rc == 0 and os.path.exists(webp_path):
             rel_path = f"/images/{slug}-{timestamp}-{i+1}.webp"
-            downloaded.append(rel_path)
-            print(f"Image saved: {rel_path}")
+            generated.append(rel_path)
+            print(f"  Image saved: {rel_path}")
         else:
-            print(f"Image optimization failed for {raw_path}", file=sys.stderr)
+            print(f"  Image optimization failed for {raw_path}", file=sys.stderr)
 
         # Clean up raw file
         if os.path.exists(raw_path):
             os.remove(raw_path)
 
-    return downloaded
+    return generated
 
 
 def insert_images_into_content(content, image_paths):
@@ -886,12 +917,13 @@ def main():
     print(f"  Content length: {len(article['content'])} chars")
 
     # ===== Step 3: Images =====
-    print("\n--- Step 3: Image Search ---")
+    print("\n--- Step 3: Image Generation (CF Workers AI) ---")
     target_images = config.get("writing", {}).get("target_images", 2)
-    image_paths = find_and_download_images(
-        search_client, topic, article["title"], count=target_images, slug=article["slug"]
+    image_config = config.get("ai", {}).get("image", {})
+    image_paths = generate_images(
+        image_config, article, count=target_images
     )
-    print(f"Downloaded {len(image_paths)} images")
+    print(f"Generated {len(image_paths)} images")
 
     # Insert images into content
     article["content"] = insert_images_into_content(article["content"], image_paths)
