@@ -30,6 +30,7 @@ jobs:
         with:
           token: ${{ secrets.GH_TOKEN }}
           fetch-depth: 1
+          submodules: false  # theme submodule not needed for publish script
 
       - name: Setup Python
         uses: actions/setup-python@v5

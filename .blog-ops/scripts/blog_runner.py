@@ -859,8 +859,8 @@ def git_commit_and_push():
     run_script(["git", "config", "user.name", "Fox"])
     run_script(["git", "config", "user.email", "fox@example.com"])
 
-    # Stage changes
-    run_script(["git", "add", "-A"])
+    # Stage only content/static/publish-log (avoid touching theme submodule pointer)
+    run_script(["git", "add", "content", "static", ".blog-ops/publish-log.md"])
 
     # Check if there are changes to commit
     result = subprocess.run(
