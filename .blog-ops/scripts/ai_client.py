@@ -105,8 +105,10 @@ class OpenAIText(TextProvider):
             "messages": messages,
             "max_tokens": max_tokens,
             "temperature": temperature,
-            # Explicitly disable thinking mode to save tokens
+            "stream": False,
+            # Explicitly disable thinking mode to save tokens (esp. Qwen3)
             "thinking": {"type": "disabled"},
+            "enable_thinking": False,
         }
 
         data = json.dumps(payload).encode("utf-8")

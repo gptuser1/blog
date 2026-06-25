@@ -621,8 +621,55 @@ def generate_image_single(image_config, prompt, slug, seq):
     return rel_path
 
 
-def fetch_images_hybrid(search_client, image_config, article, topic, count=2):
-    """Fetch images: search via Tavily first, generate via AI to fill the gap.
+def build_image_search_query(query_provider, article, topic):
+    """Build a concise English image search query via Qwen3-8B.
+
+    Tavily image search returns poor results for long Chinese titles with
+    quotes/metaphors. We use a free model to distill title+tags+topic into
+    a short English keyword query (e.g. "Yijing X9 Argentina national team
+    partnership SUV"). Falls back to slug-based query on failure.
+    """
+    slug = article.get("slug", "")
+    title = article.get("title", "")
+    tags = article.get("tags", [])
+
+    system_prompt = """You convert a Chinese blog article's metadata into a concise English image search query for the Tavily image search API.
+
+Rules:
+1. Output ONLY the query, no explanation, no quotes, no punctuation except hyphens
+2. Use 3-6 concrete English keywords/names most likely to match real photos
+3. Prefer proper nouns (brand names, person names, event names) over generic words
+4. Drop metaphors and emotional words; keep searchable entities
+5. Example: for "当蓝白旋风遇见中国智造：奕境X9的跨界启示录" with tags [奕境X9, 阿根廷国家队], output: Yijing X9 Argentina national team SUV"""
+
+    user_prompt = f"""Title: {title}
+Topic: {topic}
+Tags: {', '.join(tags) if tags else '(none)'}
+Slug: {slug}
+
+Output the English search query:"""
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+    try:
+        response = query_provider.generate(messages, max_tokens=64, temperature=0.3)
+        query = response.strip().strip('"`').strip()
+        # Sanity: take first line, strip trailing period
+        query = query.split("\n")[0].strip().rstrip(".")
+        if query and len(query) <= 120:
+            return query
+        print(f"  Image query generation returned invalid result, using fallback", file=sys.stderr)
+    except Exception as e:
+        print(f"  Image query generation failed: {e}", file=sys.stderr)
+
+    # Fallback: derive from slug (already English kebab-case)
+    return slug.replace("-", " ")
+
+
+def fetch_images_hybrid(search_client, image_config, article, topic, query_provider, count=2):
+    """Fetch images: search via Tavily first (English query), generate via AI to fill the gap.
 
     Follows the original design (task-manifest.md):
       - Prefer real images from the web (news photos, official images, etc.)
@@ -631,18 +678,21 @@ def fetch_images_hybrid(search_client, image_config, article, topic, count=2):
     Returns list of relative paths like /images/xxx.webp.
     """
     slug = article.get("slug", "")
-    title = article.get("title", "")
     image_prompts = article.get("image_prompts", [])
 
-    # Step 1: search via Tavily (priority)
-    search_query = title if title else topic
-    print(f"\nSearching images (priority) for: {search_query}")
+    # Step 1: build an English search query (Chinese titles confuse Tavily)
+    print("\nBuilding English image search query via free model...")
+    search_query = build_image_search_query(query_provider, article, topic)
+    print(f"Image search query: {search_query}")
+
+    # Step 2: search via Tavily (priority)
+    print(f"Searching images (priority) for: {search_query}")
     image_paths = find_and_download_images(
         search_client, search_query, count, slug, start_index=0
     )
     print(f"Searched: got {len(image_paths)}/{count} images")
 
-    # Step 2: if not enough, generate the rest via AI (fallback)
+    # Step 3: if not enough, generate the rest via AI (fallback)
     if len(image_paths) < count:
         needed = count - len(image_paths)
         print(f"Not enough from search, generating {needed} via AI as fallback...")
@@ -850,13 +900,28 @@ def main():
     config = load_json(CONFIG_PATH)
     print(f"Config loaded: {config.get('timezone', 'Asia/Shanghai')}")
 
-    # Initialize clients
-    try:
-        text_provider = create_text_provider(config["ai"]["text"])
-        print(f"AI provider: {config['ai']['text']['provider']} / {config['ai']['text']['model']}")
-    except Exception as e:
-        print(f"Failed to init AI provider: {e}", file=sys.stderr)
+    # Initialize text providers (multi-model: default=V4-Flash for writing,
+    # free=Qwen3-8B for topic selection and image query construction)
+    ai_text_config = config.get("ai", {}).get("text", {})
+    # Support both named-profile format and legacy flat format
+    if "default" not in ai_text_config and "provider" in ai_text_config:
+        ai_text_config = {"default": ai_text_config}
+
+    text_providers = {}
+    for name, prof_cfg in ai_text_config.items():
+        try:
+            text_providers[name] = create_text_provider(prof_cfg)
+            print(f"AI text provider [{name}]: {prof_cfg.get('model', 'unknown')}")
+        except Exception as e:
+            print(f"Failed to init provider [{name}]: {e}", file=sys.stderr)
+
+    if "default" not in text_providers:
+        print("No default text provider available, aborting", file=sys.stderr)
         return 1
+
+    def get_provider(profile_name):
+        """Get a text provider by profile name, fall back to default."""
+        return text_providers.get(profile_name, text_providers.get("default"))
 
     try:
         search_client = TavilyClient()
@@ -940,7 +1005,7 @@ def main():
             {"role": "user", "content": user_prompt},
         ]
         try:
-            response = text_provider.generate(messages, max_tokens=256, temperature=0.8)
+            response = get_provider("free").generate(messages, max_tokens=256, temperature=0.8)
         except Exception as e:
             print(f"AI topic selection failed: {e}", file=sys.stderr)
             state["last_run"] = now_dt.strftime("%Y-%m-%dT%H:%M:%S+08:00")
@@ -1019,7 +1084,7 @@ def main():
 
     # ===== Step 2: Generate Article =====
     print("\n--- Step 2: Article Generation ---")
-    article = generate_article(text_provider, topic, material_text, recent_titles)
+    article = generate_article(get_provider("default"), topic, material_text, recent_titles)
     if article is None:
         print("Article generation failed, aborting", file=sys.stderr)
         # Only update last_run in D1; do NOT write publish-log or git push,
@@ -1035,11 +1100,12 @@ def main():
     print(f"  Content length: {len(article['content'])} chars")
 
     # ===== Step 3: Images =====
-    print("\n--- Step 3: Images (Tavily search first, AI generation as fallback) ---")
+    print("\n--- Step 3: Images (Tavily search with EN query first, AI generation as fallback) ---")
     target_images = config.get("writing", {}).get("target_images", 2)
     image_config = config.get("ai", {}).get("image", {})
     image_paths = fetch_images_hybrid(
-        search_client, image_config, article, topic, count=target_images
+        search_client, image_config, article, topic,
+        query_provider=get_provider("free"), count=target_images
     )
     print(f"Got {len(image_paths)} images (search + generation)")
 
@@ -1117,16 +1183,21 @@ def main():
     state["last_run"] = now_dt.strftime("%Y-%m-%dT%H:%M:%S+08:00")
     state["weekly_count"] = state.get("weekly_count", 0) + 1
     state["stats"]["total_published"] = state.get("stats", {}).get("total_published", 0) + 1
-    # Record token usage stats into state before saving
-    merge_usage_into_state(state, text_provider.usage_total,
+    # Record token usage stats into state before saving (combined across providers)
+    combined_usage = {"prompt": 0, "completion": 0, "total": 0, "cache_hit": 0}
+    for p in text_providers.values():
+        if hasattr(p, "usage_total"):
+            for k in combined_usage:
+                combined_usage[k] += p.usage_total.get(k, 0)
+    merge_usage_into_state(state, combined_usage,
                            now_dt.strftime("%Y-%m-%dT%H:%M:%S+08:00"))
     d1_client.save_state(state)
     print(f"State updated: weekly_count={state['weekly_count']}, total={state['stats']['total_published']}")
-    if text_provider.usage_total["total"] > 0:
-        print(f"Token usage this run: prompt={text_provider.usage_total['prompt']} "
-              f"completion={text_provider.usage_total['completion']} "
-              f"total={text_provider.usage_total['total']} "
-              f"cache_hit={text_provider.usage_total['cache_hit']}")
+    if combined_usage["total"] > 0:
+        print(f"Token usage this run: prompt={combined_usage['prompt']} "
+              f"completion={combined_usage['completion']} "
+              f"total={combined_usage['total']} "
+              f"cache_hit={combined_usage['cache_hit']}")
 
     print("\n=== Blog Runner completed successfully ===")
     return 0

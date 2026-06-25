@@ -5,8 +5,11 @@
 ## 架构概览
 
 - **调度**：GitHub Actions，每天 09:00（北京时间）触发
-- **AI**：SiliconFlow / DeepSeek-V4-Flash（thinking 关闭，节省 token）
-- **搜索**：Tavily API（热点发现 + 深度素材 + 图片搜索）
+- **AI（多模型分工）**：
+  - DeepSeek-V4-Flash（thinking 关闭）：仅用于写文章（质量优先，用在刀刃上）
+  - Qwen3-8B（thinking 关闭）：用于搜索模式选题、图片搜索 query 构造等辅助任务（免费，降本）
+- **图片生成**：Cloudflare Workers AI（flux-2-klein-4b），作为 Tavily 搜图不足时的兜底
+- **搜索**：Tavily API（热点发现 + 深度素材 + 图片搜索，图片搜索使用英文 query）
 - **状态**：Cloudflare D1（ocean 库，key=`blog_state`，与 whispers 共享）
 - **部署**：推送到 main 自动触发 Cloudflare Pages 构建
 
@@ -113,11 +116,11 @@
    - 70% 走选题池（`pick_topic.py`）
    - 30% 走 Tavily 热点搜索 → AI 挑选话题
 4. 深挖素材：Tavily advanced 搜索（含 raw_content）
-5. AI 生成文章（DeepSeek-V4-Flash，thinking 关闭）
+5. AI 生成文章（DeepSeek-V4-Flash，thinking 关闭）—— 仅此步用 V4-Flash
    - system prompt 静态（可命中上下文缓存）
    - user prompt 含选题 + 素材 + 最近 3 篇标题
-   - 输出 JSON：{title, content, tags, categories}
-6. 配图：Tavily 图片搜索优先 → 不足时 CF Workers AI 生成补充 → process_image.py 优化
+   - 输出 JSON：{title, content, tags, categories, image_prompts}
+6. 配图：Qwen3-8B 生成英文搜索 query → Tavily 图片搜索优先 → 不足时 CF Workers AI 生成补充 → process_image.py 优化
 7. `create_post.py` 生成文章文件
 8. `lint_post.py` 自审
 9. 更新 `publish-log.md`

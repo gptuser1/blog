@@ -2,10 +2,18 @@
   "timezone": "Asia/Shanghai",
   "ai": {
     "text": {
-      "provider": "openai",
-      "model": "deepseek-ai/DeepSeek-V4-Flash",
-      "base_url": "https://api.siliconflow.cn/v1",
-      "api_key_env": "OPENAI_API_KEY"
+      "default": {
+        "provider": "openai",
+        "model": "deepseek-ai/DeepSeek-V4-Flash",
+        "base_url": "https://api.siliconflow.cn/v1",
+        "api_key_env": "OPENAI_API_KEY"
+      },
+      "free": {
+        "provider": "openai",
+        "model": "Qwen/Qwen3-8B",
+        "base_url": "https://api.siliconflow.cn/v1",
+        "api_key_env": "OPENAI_API_KEY"
+      }
     },
     "image": {
       "provider": "workers_ai",
