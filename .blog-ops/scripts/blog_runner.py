@@ -530,7 +530,9 @@ def generate_image_cf(prompt, output_path, image_config):
     """Generate an image via Cloudflare Workers AI (flux-2-klein-4b).
 
     Uses multipart/form-data as required by the model API.
-    Returns True on success, False on failure.
+    Returns (success: bool, flagged: bool).
+      flagged=True means the output was blocked by CF safety filter (code 3030),
+      caller may retry with a rephrased prompt.
     """
     account_id = os.environ.get(image_config.get("account_id_env", "CF_IMAGE_ACCOUNT_ID"), "")
     api_token = os.environ.get(image_config.get("api_token_env", "CF_IMAGE_API_TOKEN"), "")
@@ -538,7 +540,7 @@ def generate_image_cf(prompt, output_path, image_config):
 
     if not account_id or not api_token:
         print("CF image gen: missing CF_IMAGE_ACCOUNT_ID or CF_IMAGE_API_TOKEN", file=sys.stderr)
-        return False
+        return False, False
 
     url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{model}"
 
@@ -559,24 +561,115 @@ def generate_image_cf(prompt, output_path, image_config):
     try:
         with urllib.request.urlopen(req, timeout=120) as resp:
             result = json.loads(resp.read().decode("utf-8"))
-
-        if result.get("success"):
-            image_b64 = result.get("result", {}).get("image", "")
-            if image_b64:
-                image_data = base64.b64decode(image_b64)
-                with open(output_path, "wb") as f:
-                    f.write(image_data)
-                return True
-            print("CF image gen: empty image in response", file=sys.stderr)
-            return False
-
-        errors = result.get("errors", [])
-        err_msg = errors[0].get("message", "unknown") if errors else "unknown"
-        print(f"CF image gen error: {err_msg}", file=sys.stderr)
-        return False
+    except urllib.error.HTTPError as e:
+        # CF returns 400 with JSON body when output is flagged (code 3030).
+        # Parse the body so the caller can decide to retry with rephrasing.
+        try:
+            result = json.loads(e.read().decode("utf-8"))
+        except Exception:
+            print(f"CF image gen failed: HTTP {e.code} {e.reason}", file=sys.stderr)
+            return False, False
     except Exception as e:
         print(f"CF image gen failed: {e}", file=sys.stderr)
-        return False
+        return False, False
+
+    if result.get("success"):
+        image_b64 = result.get("result", {}).get("image", "")
+        if image_b64:
+            image_data = base64.b64decode(image_b64)
+            with open(output_path, "wb") as f:
+                f.write(image_data)
+            return True, False
+        print("CF image gen: empty image in response", file=sys.stderr)
+        return False, False
+
+    errors = result.get("errors", [])
+    err_msg = errors[0].get("message", "unknown") if errors else "unknown"
+    err_code = errors[0].get("code", 0) if errors else 0
+    flagged = (err_code == 3030 or "flagged" in err_msg.lower())
+    print(f"CF image gen error: {err_msg}", file=sys.stderr)
+    return False, flagged
+
+
+def rephrase_image_prompt(rephrase_provider, prompt):
+    """Use Qwen3-8B (thinking off) to rephrase an image prompt.
+
+    The 4B flux model is highly sensitive to prompt wording; the same scene
+    described with different words often passes the safety filter. Qwen3-8B
+    understands the scene semantics and produces a genuinely different phrasing
+    (not a trivial word swap).
+
+    Returns a new prompt string, or None on failure.
+    """
+    system_prompt = """You rephrase image generation prompts for the flux-2-klein-4b model.
+
+Rules:
+1. Keep the SAME scene/subject/objects (do not change what is depicted)
+2. Change wording, sentence structure, and ordering substantially
+3. Keep it concrete and visual (nouns > adjectives), suitable for a 4B model
+4. Keep the art style / lighting description, may reword it
+5. Output ONLY the rephrased prompt, no explanation, no quotes
+6. If the original mentions a brand/person name that may trigger filters, replace with a generic but accurate description (e.g. "Argentina team" -> "a national football team in blue and white stripes")"""
+
+    user_prompt = f"Original prompt:\n{prompt}\n\nRephrased prompt:"
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+    try:
+        response = rephrase_provider.generate(messages, max_tokens=256, temperature=0.7)
+        new_prompt = response.strip().strip('"`').strip()
+        # Take first line, strip trailing period
+        new_prompt = new_prompt.split("\n")[0].strip().rstrip(".")
+        if new_prompt and len(new_prompt) >= 20:
+            return new_prompt
+        print(f"  Rephrase returned invalid result", file=sys.stderr)
+    except Exception as e:
+        print(f"  Rephrase failed: {e}", file=sys.stderr)
+    return None
+
+
+def generate_image_with_retry(image_config, prompt, output_path, rephrase_provider,
+                              max_retries=3):
+    """Generate an image with retry on CF safety filter flag.
+
+    Strategy when flagged:
+      1. Rephrase via Qwen3-8B (keep meaning, change wording) — try up to max_retries times
+      2. As last resort, simplify the prompt to core concrete nouns (truncation)
+
+    Returns True on success, False on failure.
+    """
+    current_prompt = prompt
+    for attempt in range(max_retries + 1):
+        if attempt > 0:
+            # Rephrase before retrying
+            print(f"  Rephrasing prompt (attempt {attempt}/{max_retries}) via free model...")
+            new_prompt = rephrase_image_prompt(rephrase_provider, current_prompt)
+            if not new_prompt:
+                print(f"  Rephrase failed, cannot retry", file=sys.stderr)
+                return False
+            current_prompt = new_prompt
+            print(f"  Rephrased: {current_prompt[:90]}...")
+
+        success, flagged = generate_image_cf(current_prompt, output_path, image_config)
+        if success:
+            return True
+        if not flagged:
+            # Non-filter failure, no point retrying with rephrase
+            return False
+        # flagged=True: loop continues to rephrase and retry
+
+    # Last resort: simplify to core nouns (truncation, drop style tail)
+    print(f"  Still flagged after {max_retries} rephrases, trying simplified prompt...")
+    simplified = prompt.split(".")[0].strip()  # first sentence only
+    if simplified and simplified != current_prompt:
+        print(f"  Simplified: {simplified[:90]}...")
+        success, _ = generate_image_cf(simplified, output_path, image_config)
+        if success:
+            return True
+
+    return False
 
 
 def build_fallback_image_prompt(slug):
@@ -589,8 +682,9 @@ def build_fallback_image_prompt(slug):
             f"soft lighting, detailed rendering, no text.")
 
 
-def generate_image_single(image_config, prompt, slug, seq):
+def generate_image_single(image_config, prompt, slug, seq, rephrase_provider=None):
     """Generate one image via CF Workers AI, optimize to WebP.
+    When rephrase_provider is given, retries with rephrased prompts on CF filter flag.
     Returns relative path like /images/xxx.webp, or None on failure.
     """
     os.makedirs(IMAGES_DIR, exist_ok=True)
@@ -598,7 +692,11 @@ def generate_image_single(image_config, prompt, slug, seq):
     raw_path = os.path.join(IMAGES_DIR, f"{slug}-{timestamp}-{seq+1}.raw")
     webp_path = os.path.join(IMAGES_DIR, f"{slug}-{timestamp}-{seq+1}.webp")
 
-    if not generate_image_cf(prompt, raw_path, image_config):
+    if rephrase_provider:
+        ok = generate_image_with_retry(image_config, prompt, raw_path, rephrase_provider)
+    else:
+        ok, _ = generate_image_cf(prompt, raw_path, image_config)
+    if not ok:
         return None
 
     # Optimize: resize + convert to WebP
@@ -711,7 +809,8 @@ def fetch_images_hybrid(search_client, image_config, article, topic, query_provi
             seq = len(image_paths)  # next sequence number
             print(f"Generating image {len(image_paths)+1}/{count} via CF Workers AI...")
             print(f"  Prompt: {prompt[:100]}...")
-            rel_path = generate_image_single(image_config, prompt, slug, seq)
+            rel_path = generate_image_single(image_config, prompt, slug, seq,
+                                             rephrase_provider=query_provider)
             if rel_path:
                 image_paths.append(rel_path)
 
