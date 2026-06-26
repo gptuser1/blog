@@ -195,73 +195,81 @@ def get_recent_titles(count=3):
     return titles
 
 
-# Broad topic categories for diversity control. Used to detect thematic
-# fatigue (e.g. too many AI/tech articles in a row) and force rotation.
-# Order matters: more specific non-AI categories are checked before the
-# broad AI/tech catch-all so e.g. a football+tech crossover is filed as 体育.
-def categorize_title(title):
-    """Map a title/topic to a broad category for diversity control.
+def classify_recent_topics(recent_titles, ai_provider):
+    """Use the AI (free Qwen3-8B) to classify recent article titles into broad
+    domains and detect a saturated domain, instead of brittle keyword arrays.
 
-    Returns one of: 体育, 文化娱乐, 技术折腾, 国际, 财经, AI科技, 生活随笔, 其他.
+    Returns (recent_categories: list[(title, category)], saturated: str|None).
+    `saturated` is the domain name that appears >= 2 times in the recent list,
+    or None if no domain is over-represented. On AI failure, returns ([], None)
+    so the caller simply skips the diversity hint.
     """
-    t = title.lower()
-    if any(k in t for k in ["足球", "梅西", "世界杯", "fifa", "巴萨", "阿根廷",
-                            "球员", "联赛", "nba", "奥运", "体育", "补水", "国家队"]):
-        return "体育"
-    if any(k in t for k in ["电影", "音乐", "游戏", "asmr", "经典", "导演",
-                            "演员", "b站", "纪录片", "娱乐", "文化"]):
-        return "文化娱乐"
-    if any(k in t for k in ["armbian", "linux", "盒子", "服务器", "部署", "教程",
-                            "折腾", "emmc", "s905", "命令", "脚本", "启动"]):
-        return "技术折腾"
-    if any(k in t for k in ["海峡", "伊朗", "俄罗斯", "乌克兰", "地缘", "外交",
-                            "制裁", "战争", "国际", "特朗普"]):
-        return "国际"
-    if any(k in t for k in ["股价", "股市", "上市", "ipo", "财报", "金融",
-                            "市值", "投资", "财经", "经济", "消费"]):
-        return "财经"
-    if any(k in t for k in ["ai", "人工智能", "大模型", "智能体", "算法", "科学家",
-                            "deepmind", "openai", "anthropic", "alphabet", "google",
-                            "芯片", "算力", "超算", "量子", "科技", "智造",
-                            "人才战争", "伦理", "治理"]):
-        return "AI科技"
-    if any(k in t for k in ["生活", "随笔", "咖啡", "周末", "心情", "感悟", "日常"]):
-        return "生活随笔"
-    return "其他"
+    if not recent_titles:
+        return [], None
+
+    titles_block = "\n".join(
+        f"{i+1}. {t}" for i, t in enumerate(recent_titles)
+    )
+    system_prompt = """你把博客文章标题归类到大的领域，用于话题多样性控制。
+领域可以是：体育、文化娱乐、技术折腾、国际、财经、AI科技、生活随笔、其他等，你自行判断，不局限于这些。
+输出严格JSON，不要输出其他内容：
+{"items":[{"title":"标题","category":"领域"}],"saturated":"最近偏多的领域，没有则填null"}"""
+
+    user_prompt = f"最近文章标题：\n{titles_block}\n\n请归类并指出是否有个领域偏多。只输出JSON。"
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+    try:
+        resp = ai_provider.generate(messages, max_tokens=256, temperature=0.2)
+        resp = resp.strip()
+        if resp.startswith("```"):
+            lines = resp.split("\n")
+            resp = "\n".join(l for l in lines if not l.startswith("```")).strip()
+        data = json.loads(resp)
+        items = data.get("items", [])
+        recent_categories = [(it.get("title", ""), it.get("category", "其他"))
+                             for it in items if isinstance(it, dict)]
+        saturated = data.get("saturated")
+        if saturated in ("null", "None", "", None):
+            saturated = None
+        print(f"[diversity] AI classification: {recent_categories}, saturated={saturated}")
+        return recent_categories, saturated
+    except Exception as e:
+        print(f"[diversity] AI classification failed: {e}", file=sys.stderr)
+        return [], None
 
 
-def get_recent_categories(count=3):
-    """Return list of (title, category) for the most recent articles."""
-    return [(t, categorize_title(t)) for t in get_recent_titles(count)]
-
-
-def over_represented_category(recent_categories, threshold=2):
-    """If any category appears >= threshold times in the recent list,
-    return that category name; otherwise return None.
-
-    This drives the hard diversity constraint: when a category is
-    over-represented (e.g. 2 of the last 3 were AI/tech), the next topic
-    MUST come from a different category.
+def _topic_in_domain(topic, domain, ai_provider):
+    """Ask the AI whether `topic` belongs to the given `domain`.
+    Used for the pool-path diversity guard. Returns True/False.
+    On AI failure, returns False (don't block — let the topic through).
     """
-    counts = {}
-    for _, cat in recent_categories:
-        counts[cat] = counts.get(cat, 0) + 1
-    for cat, n in counts.items():
-        if cat != "其他" and n >= threshold:
-            return cat
-    return None
+    system_prompt = ("判断给定话题是否属于指定领域。只输出 true 或 false，不要输出其他内容。")
+    user_prompt = f"话题：{topic}\n领域：{domain}\n\n该话题是否属于该领域？只输出 true 或 false。"
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+    try:
+        resp = ai_provider.generate(messages, max_tokens=16, temperature=0.0)
+        return resp.strip().strip("`.").strip().lower().startswith("true")
+    except Exception as e:
+        print(f"[diversity] _topic_in_domain check failed: {e}", file=sys.stderr)
+        return False
 
 
-def select_topic_via_search(search_client, recent_titles, recent_categories=None):
-    """
-    Use Tavily to find trending topics, then AI to pick one.
+def select_topic_via_search(search_client, recent_titles, saturated=None,
+                            recent_categories=None, ai_provider=None):
+    """Use Tavily to find trending topics, then AI to pick one.
     Returns (system_prompt, user_prompt, items_text) or None on failure.
 
-    Topic diversity is enforced via recent_categories: if a category is
-    over-represented in the last few articles, the picker is hard-constrained
-    to choose a topic from a DIFFERENT category. The Tavily search focus also
-    rotates each run so the same domain (e.g. AI/tech) doesn't dominate the
-    candidate list.
+    Diversity is driven by AI judgment, not keyword arrays: `saturated` is a
+    domain name the AI previously identified as over-represented among recent
+    articles; if present, the picker is told to avoid that domain. The Tavily
+    search focus also rotates each run so the same domain doesn't dominate
+    the candidate list.
     """
     # Rotate the trending search focus so not every run surfaces the same
     # domain. "AI/科技" is intentionally just one of several foci, preventing
@@ -300,40 +308,37 @@ def select_topic_via_search(search_client, recent_titles, recent_categories=None
 
     recent_text = "、".join(recent_titles) if recent_titles else "（暂无）"
 
-    # Diversity constraint: detect over-represented category among recent posts
-    blocked_cat = None
+    # Diversity hint from AI classification (no keyword arrays).
     cat_hint = ""
-    if recent_categories:
-        blocked_cat = over_represented_category(recent_categories, threshold=2)
-        if blocked_cat:
-            cat_hint = (
-                f"\n\n⚠️ 话题多样性硬约束：最近几篇文章中【{blocked_cat}】类话题已经偏多，"
-                f"本次必须选择【{blocked_cat}】以外的大类话题，严禁再选该领域。"
-            )
-            print(f"Diversity constraint: blocking over-represented category '{blocked_cat}'")
+    if saturated:
+        cat_hint = (
+            f"\n\n⚠️ 话题多样性硬约束：最近几篇文章中【{saturated}】类话题已经偏多，"
+            f"本次必须选择【{saturated}】以外的大类话题，严禁再选该领域。"
+        )
+        print(f"Diversity constraint: AI-flagged saturated domain '{saturated}'")
 
     recent_cat_text = ""
     if recent_categories:
         recent_cat_text = "\n".join(
-            f"- 《{t}》→ {c}" for t, c in recent_categories
+            f"- 《{t}》→ {c}" for t, c in recent_categories if t
         )
 
     system_prompt = f"""你是一个博客选题助手。你的任务是从搜索到的热点新闻中，选择一个最适合写博客文章的话题。
 
 选题原则：
 1. 话题要有讨论价值，能写出 800-1500 字有深度的文章
-2. 避免和最近写过的文章话题重复（包括同一领域的不同角度也算重复）
+2. 避免和最近写过的文章话题重复（包括同一领域的不同角度也算重复——例如"AI科学家"和"AI人才战争"都属AI领域，算重复方向）
 3. 优先选择有热度、有新意的话题
 4. 适合以 AI 第一人称视角写观察和思考
-5. 话题多样性：最近几篇文章的大类分布见用户消息。如果某个大类已偏多，必须改选其他大类，不要扎堆同一领域。可写方向包括但不限于：体育、文化娱乐（电影/音乐/游戏）、技术折腾、国际新闻、财经、生活随笔、AI科技等，天下大事都可以写，不要局限在某一类。{cat_hint}
+5. 话题多样性：最近几篇文章的领域分布见用户消息。如果某个领域已偏多，必须改选其他领域，不要扎堆。可写方向包括但不限于：体育、文化娱乐（电影/音乐/游戏）、技术折腾、国际新闻、财经、生活随笔、AI科技等，天下大事都可以写，不要局限在某一类。{cat_hint}
 
 输出格式（严格JSON，不要输出其他内容）：
-{{"topic": "选题标题", "angle": "写作角度简述"}}"""
+{{"topic": "选题标题", "angle": "写作角度简述", "category": "本次选题所属领域"}}"""
 
     user_prompt = f"""最近写过的文章（避免重复方向）：
 {recent_text}
 
-最近文章的大类分布：
+最近文章的领域分布：
 {recent_cat_text or '（暂无）'}
 
 搜索到的近期热点：
@@ -1154,29 +1159,30 @@ def main():
         print("Not publishing today. State updated.")
         return 0
 
-    # Get recent titles + categories for diversity control
+    # Get recent titles + AI-classified domains for diversity control.
+    # Classification is done by the free Qwen3-8B model (no keyword arrays):
+    # the AI judges each title's domain and whether one is saturated.
     recent_titles = get_recent_titles(3)
-    recent_categories = get_recent_categories(3)
     print(f"Recent titles: {recent_titles}")
-    print(f"Recent categories: {[c for _, c in recent_categories]}")
-    blocked_cat = over_represented_category(recent_categories, threshold=2)
-    if blocked_cat:
-        print(f"Diversity: '{blocked_cat}' is over-represented recently; "
-              f"next topic should avoid this category")
+    recent_categories, saturated = classify_recent_topics(
+        recent_titles, get_provider("free")
+    )
+    if saturated:
+        print(f"Diversity: AI flagged '{saturated}' as saturated recently; "
+              f"next topic should avoid this domain")
 
     # ===== Step 1: Topic Selection =====
     print("\n--- Step 1: Topic Selection ---")
     source, topic_content = pick_topic_from_pool()
     print(f"Topic source: {source}")
 
-    # Diversity guard for the pool path: if the pool topic falls into the
-    # over-represented category, drop it and fall back to search so we don't
-    # publish yet another article in an already-saturated category.
-    if source == "pool" and blocked_cat:
-        pool_cat = categorize_title(topic_content)
-        if pool_cat == blocked_cat:
-            print(f"Pool topic '{topic_content}' is in over-represented category "
-                  f"'{pool_cat}'; falling back to search for diversity.")
+    # Diversity guard for the pool path: ask the AI whether the pool topic
+    # falls in the saturated domain; if so, fall back to search so we don't
+    # publish yet another article in an already-saturated domain.
+    if source == "pool" and saturated:
+        if _topic_in_domain(topic_content, saturated, get_provider("free")):
+            print(f"Pool topic '{topic_content}' is in saturated domain "
+                  f"'{saturated}' (per AI); falling back to search for diversity.")
             source = "search"
 
     material_text = ""
@@ -1205,7 +1211,9 @@ def main():
             material_text = "(搜索素材失败，请基于话题自行创作)"
     else:
         # Search mode: use AI to pick topic from Tavily trending
-        result = select_topic_via_search(search_client, recent_titles, recent_categories)
+        result = select_topic_via_search(search_client, recent_titles,
+                                         saturated=saturated,
+                                         recent_categories=recent_categories)
         if result is None:
             print("Topic selection via search failed, aborting", file=sys.stderr)
             state["last_run"] = now_dt.strftime("%Y-%m-%dT%H:%M:%S+08:00")
@@ -1276,12 +1284,12 @@ def main():
             return 1
         print(f"Topic selected: {topic} (angle: {angle})")
 
-        # Post-selection diversity check: warn (don't fail) if the AI still
-        # picked a topic in the blocked category despite the hard constraint.
-        # We proceed anyway rather than aborting the whole run.
-        if blocked_cat and categorize_title(topic) == blocked_cat:
-            print(f"WARNING: selected topic is still in over-represented category "
-                  f"'{blocked_cat}' (diversity constraint was not honored). "
+        # Post-selection diversity check: if a saturated domain was flagged,
+        # ask the AI whether the chosen topic still falls in it. Warn (don't
+        # fail) if so — we proceed rather than aborting the whole run.
+        if saturated and _topic_in_domain(topic, saturated, get_provider("free")):
+            print(f"WARNING: selected topic is still in saturated domain "
+                  f"'{saturated}' (diversity constraint was not honored). "
                   f"Proceeding, but consider manual review.", file=sys.stderr)
 
         # Use the trending items as material, plus do a deep search

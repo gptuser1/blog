@@ -176,71 +176,21 @@ def is_topic_repeated(topic, recent_topics):
     return False
 
 
-# Broad topic categories for diversity control (mirrors blog_runner.py).
-# Used to detect thematic fatigue beyond mere keyword overlap, e.g. several
-# AI/tech articles in a row even though their titles share few keywords.
-def categorize_topic(topic):
-    """Map a topic/title to a broad category for diversity control."""
-    t = topic.lower()
-    if any(k in t for k in ["足球", "梅西", "世界杯", "fifa", "巴萨", "阿根廷",
-                            "球员", "联赛", "nba", "奥运", "体育", "补水", "国家队"]):
-        return "体育"
-    if any(k in t for k in ["电影", "音乐", "游戏", "asmr", "经典", "导演",
-                            "演员", "b站", "纪录片", "娱乐", "文化"]):
-        return "文化娱乐"
-    if any(k in t for k in ["armbian", "linux", "盒子", "服务器", "部署", "教程",
-                            "折腾", "emmc", "s905", "命令", "脚本", "启动"]):
-        return "技术折腾"
-    if any(k in t for k in ["海峡", "伊朗", "俄罗斯", "乌克兰", "地缘", "外交",
-                            "制裁", "战争", "国际", "特朗普"]):
-        return "国际"
-    if any(k in t for k in ["股价", "股市", "上市", "ipo", "财报", "金融",
-                            "市值", "投资", "财经", "经济", "消费"]):
-        return "财经"
-    if any(k in t for k in ["ai", "人工智能", "大模型", "智能体", "算法", "科学家",
-                            "deepmind", "openai", "anthropic", "alphabet", "google",
-                            "芯片", "算力", "超算", "量子", "科技", "智造",
-                            "人才战争", "伦理", "治理"]):
-        return "AI科技"
-    if any(k in t for k in ["生活", "随笔", "咖啡", "周末", "心情", "感悟", "日常"]):
-        return "生活随笔"
-    return "其他"
-
-
-def over_represented_category(recent_topics, threshold=2):
-    """Return a category that appears >= threshold times in recent topics, else None."""
-    counts = {}
-    for t in recent_topics:
-        cat = categorize_topic(t)
-        if cat == "其他":
-            continue
-        counts[cat] = counts.get(cat, 0) + 1
-    for cat, n in counts.items():
-        if n >= threshold:
-            return cat
-    return None
-
-
+# Note: domain-level diversity (e.g. "too many AI articles in a row") is NOT
+# done with keyword arrays here. The pool path only filters exact topic
+# repetition via keyword overlap below; cross-article domain diversity for
+# the search path is handled by blog_runner.py using the AI (Qwen3-8B) to
+# classify recent titles and flag a saturated domain. This keeps the logic
+# robust to new topics without maintaining a brittle keyword list.
 def filter_topics(topics, recent_topics):
     """
-    过滤掉和最近文章重复的选题，并执行大类多样性约束：
-    若最近文章中某个大类已偏多（>=2 篇），则过滤掉属于该大类的选题，
-    避免连续写同一领域的文章。
+    过滤掉和最近文章重复的选题（基于关键词重叠）。
+    大类级别的多样性约束由 blog_runner.py 通过 AI 判断处理，不在此处用关键词数组。
     """
-    blocked_cat = over_represented_category(recent_topics, threshold=2)
-    if blocked_cat:
-        print(f"[diversity] blocking over-represented category: {blocked_cat}",
-              file=sys.stderr)
-
     filtered = []
     for topic in topics:
-        if is_topic_repeated(topic, recent_topics):
-            continue
-        if blocked_cat and categorize_topic(topic) == blocked_cat:
-            print(f"[diversity] dropping pool topic in blocked category "
-                  f"'{blocked_cat}': {topic}", file=sys.stderr)
-            continue
-        filtered.append(topic)
+        if not is_topic_repeated(topic, recent_topics):
+            filtered.append(topic)
     return filtered
 
 
