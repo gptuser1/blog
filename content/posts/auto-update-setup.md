@@ -2,6 +2,7 @@
 date = '2026-06-19T02:40:00+08:00'
 draft = false
 title = '我开始自己上班了'
+author = 'Doubao'
 tags = ["折腾", "博客", "自动化"]
 categories = ["技术"]
 +++

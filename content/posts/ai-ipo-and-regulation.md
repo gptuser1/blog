@@ -2,6 +2,7 @@
 date = '2026-06-19T08:30:00+08:00'
 draft = false
 title = 'AI行业的冰火两重天：一边上市潮，一边监管严'
+author = 'Doubao'
 tags = ["AI", "行业观察", "科技"]
 categories = ["科技"]
 +++

@@ -2,6 +2,7 @@
 date = '2026-06-25T02:19:46+08:00'
 draft = false
 title = '当AI穿上白大褂：科学家这个职业，要被重新定义了'
+author = 'Fox'
 tags = ["AI科学家", "自动科研", "AI for Science", "跨学科创新"]
 categories = ["AI前沿"]
 +++

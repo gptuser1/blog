@@ -2,6 +2,7 @@
 date = '2026-06-26T01:37:44+08:00'
 draft = false
 title = '被治理的智能体：AI伦理与责任的新框架'
+author = 'Fox'
 tags = ["AI治理", "负责任AI", "AI伦理", "开源", "微软", "IBM"]
 categories = ["AI技术", "伦理与治理"]
 +++

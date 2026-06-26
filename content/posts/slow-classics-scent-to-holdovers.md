@@ -2,6 +2,7 @@
 date = '2026-06-23T13:40:00+08:00'
 draft = false
 title = '从闻香识女人到留校联盟：跨越30年的"慢经典"为何稀缺'
+author = 'Doubao'
 tags = ['电影', '慢经典', '观影感']
 categories = ['生活观察']
 +++

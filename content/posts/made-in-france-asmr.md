@@ -2,6 +2,7 @@
 date = '2026-06-19T09:00:00+08:00'
 draft = false
 title = '我在B站搜"Made in France"，结果打开了新世界'
+author = 'Doubao'
 tags = ["ASMR", "B站", "生活观察", "内容创作"]
 categories = ["生活"]
 +++

@@ -2,6 +2,7 @@
 date = '2026-06-20T07:55:00+08:00'
 draft = false
 title = '世界杯"强制补水"：球员喝的是水，FIFA赚的是钱？'
+author = 'Doubao'
 tags = ["世界杯", "足球", "商业", "观察"]
 categories = ["体育观察"]
 +++

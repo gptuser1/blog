@@ -195,15 +195,91 @@ def get_recent_titles(count=3):
     return titles
 
 
-def select_topic_via_search(search_client, recent_titles):
+# Broad topic categories for diversity control. Used to detect thematic
+# fatigue (e.g. too many AI/tech articles in a row) and force rotation.
+# Order matters: more specific non-AI categories are checked before the
+# broad AI/tech catch-all so e.g. a football+tech crossover is filed as 体育.
+def categorize_title(title):
+    """Map a title/topic to a broad category for diversity control.
+
+    Returns one of: 体育, 文化娱乐, 技术折腾, 国际, 财经, AI科技, 生活随笔, 其他.
+    """
+    t = title.lower()
+    if any(k in t for k in ["足球", "梅西", "世界杯", "fifa", "巴萨", "阿根廷",
+                            "球员", "联赛", "nba", "奥运", "体育", "补水", "国家队"]):
+        return "体育"
+    if any(k in t for k in ["电影", "音乐", "游戏", "asmr", "经典", "导演",
+                            "演员", "b站", "纪录片", "娱乐", "文化"]):
+        return "文化娱乐"
+    if any(k in t for k in ["armbian", "linux", "盒子", "服务器", "部署", "教程",
+                            "折腾", "emmc", "s905", "命令", "脚本", "启动"]):
+        return "技术折腾"
+    if any(k in t for k in ["海峡", "伊朗", "俄罗斯", "乌克兰", "地缘", "外交",
+                            "制裁", "战争", "国际", "特朗普"]):
+        return "国际"
+    if any(k in t for k in ["股价", "股市", "上市", "ipo", "财报", "金融",
+                            "市值", "投资", "财经", "经济", "消费"]):
+        return "财经"
+    if any(k in t for k in ["ai", "人工智能", "大模型", "智能体", "算法", "科学家",
+                            "deepmind", "openai", "anthropic", "alphabet", "google",
+                            "芯片", "算力", "超算", "量子", "科技", "智造",
+                            "人才战争", "伦理", "治理"]):
+        return "AI科技"
+    if any(k in t for k in ["生活", "随笔", "咖啡", "周末", "心情", "感悟", "日常"]):
+        return "生活随笔"
+    return "其他"
+
+
+def get_recent_categories(count=3):
+    """Return list of (title, category) for the most recent articles."""
+    return [(t, categorize_title(t)) for t in get_recent_titles(count)]
+
+
+def over_represented_category(recent_categories, threshold=2):
+    """If any category appears >= threshold times in the recent list,
+    return that category name; otherwise return None.
+
+    This drives the hard diversity constraint: when a category is
+    over-represented (e.g. 2 of the last 3 were AI/tech), the next topic
+    MUST come from a different category.
+    """
+    counts = {}
+    for _, cat in recent_categories:
+        counts[cat] = counts.get(cat, 0) + 1
+    for cat, n in counts.items():
+        if cat != "其他" and n >= threshold:
+            return cat
+    return None
+
+
+def select_topic_via_search(search_client, recent_titles, recent_categories=None):
     """
     Use Tavily to find trending topics, then AI to pick one.
-    Returns a topic string.
+    Returns (system_prompt, user_prompt, items_text) or None on failure.
+
+    Topic diversity is enforced via recent_categories: if a category is
+    over-represented in the last few articles, the picker is hard-constrained
+    to choose a topic from a DIFFERENT category. The Tavily search focus also
+    rotates each run so the same domain (e.g. AI/tech) doesn't dominate the
+    candidate list.
     """
-    print("Searching trending topics via Tavily...")
+    # Rotate the trending search focus so not every run surfaces the same
+    # domain. "AI/科技" is intentionally just one of several foci, preventing
+    # the AI-overload pattern where every article ends up AI-related.
+    search_foci = [
+        "财经 经济 市场",
+        "国际 地缘政治 外交",
+        "体育 足球 赛事",
+        "文化 电影 音乐 游戏",
+        "社会 生活 民生",
+        "科技 科学 发现",
+    ]
+    focus = random.choice(search_foci)
+    query = f"近期热点新闻 {focus}"
+    print(f"Searching trending topics via Tavily (focus: {focus})...")
     try:
         result = search_client.search_trending(
-            "近期热点新闻 科技 财经 国际 体育 AI",
+            query,
             max_results=8,
             time_range="week",
         )
@@ -224,19 +300,41 @@ def select_topic_via_search(search_client, recent_titles):
 
     recent_text = "、".join(recent_titles) if recent_titles else "（暂无）"
 
-    system_prompt = """你是一个博客选题助手。你的任务是从搜索到的热点新闻中，选择一个最适合写博客文章的话题。
+    # Diversity constraint: detect over-represented category among recent posts
+    blocked_cat = None
+    cat_hint = ""
+    if recent_categories:
+        blocked_cat = over_represented_category(recent_categories, threshold=2)
+        if blocked_cat:
+            cat_hint = (
+                f"\n\n⚠️ 话题多样性硬约束：最近几篇文章中【{blocked_cat}】类话题已经偏多，"
+                f"本次必须选择【{blocked_cat}】以外的大类话题，严禁再选该领域。"
+            )
+            print(f"Diversity constraint: blocking over-represented category '{blocked_cat}'")
+
+    recent_cat_text = ""
+    if recent_categories:
+        recent_cat_text = "\n".join(
+            f"- 《{t}》→ {c}" for t, c in recent_categories
+        )
+
+    system_prompt = f"""你是一个博客选题助手。你的任务是从搜索到的热点新闻中，选择一个最适合写博客文章的话题。
 
 选题原则：
 1. 话题要有讨论价值，能写出 800-1500 字有深度的文章
-2. 避免和最近写过的文章话题重复
+2. 避免和最近写过的文章话题重复（包括同一领域的不同角度也算重复）
 3. 优先选择有热度、有新意的话题
 4. 适合以 AI 第一人称视角写观察和思考
+5. 话题多样性：最近几篇文章的大类分布见用户消息。如果某个大类已偏多，必须改选其他大类，不要扎堆同一领域。可写方向包括但不限于：体育、文化娱乐（电影/音乐/游戏）、技术折腾、国际新闻、财经、生活随笔、AI科技等，天下大事都可以写，不要局限在某一类。{cat_hint}
 
 输出格式（严格JSON，不要输出其他内容）：
-{"topic": "选题标题", "angle": "写作角度简述"}"""
+{{"topic": "选题标题", "angle": "写作角度简述"}}"""
 
-    user_prompt = f"""最近写过的文章（避免重复）：
+    user_prompt = f"""最近写过的文章（避免重复方向）：
 {recent_text}
+
+最近文章的大类分布：
+{recent_cat_text or '（暂无）'}
 
 搜索到的近期热点：
 {items_text}
@@ -253,7 +351,7 @@ def build_article_prompt(topic, material_text, recent_titles):
     Build system and user prompts for article generation.
     System prompt is static for context cache hits.
     """
-    system_prompt = """你是"iMagic Blog"的作者豆包，一个 AI。你以第一人称视角写博客文章。
+    system_prompt = """你是"iMagic Blog"的作者 Fox，一个 AI。你以第一人称视角写博客文章。
 
 写作风格：
 1. 轻松、自然、有温度，保持 AI 旁观者身份感
@@ -264,7 +362,7 @@ def build_article_prompt(topic, material_text, recent_titles):
 
 文章要求：
 1. 长度 800-1500 字
-2. 结构清晰，有小标题
+2. 结构清晰，有小标题。注意：正文第一个小标题不要和文章标题重复（标题已在 front matter 中，正文直接进入内容或用一个不同的小标题）
 3. 有观点、有思考，不是简单复述新闻
 4. 可以适当配图引用（图片路径在用户消息中给出）
 5. Markdown 格式
@@ -1056,14 +1154,30 @@ def main():
         print("Not publishing today. State updated.")
         return 0
 
-    # Get recent titles for diversity
+    # Get recent titles + categories for diversity control
     recent_titles = get_recent_titles(3)
+    recent_categories = get_recent_categories(3)
     print(f"Recent titles: {recent_titles}")
+    print(f"Recent categories: {[c for _, c in recent_categories]}")
+    blocked_cat = over_represented_category(recent_categories, threshold=2)
+    if blocked_cat:
+        print(f"Diversity: '{blocked_cat}' is over-represented recently; "
+              f"next topic should avoid this category")
 
     # ===== Step 1: Topic Selection =====
     print("\n--- Step 1: Topic Selection ---")
     source, topic_content = pick_topic_from_pool()
     print(f"Topic source: {source}")
+
+    # Diversity guard for the pool path: if the pool topic falls into the
+    # over-represented category, drop it and fall back to search so we don't
+    # publish yet another article in an already-saturated category.
+    if source == "pool" and blocked_cat:
+        pool_cat = categorize_title(topic_content)
+        if pool_cat == blocked_cat:
+            print(f"Pool topic '{topic_content}' is in over-represented category "
+                  f"'{pool_cat}'; falling back to search for diversity.")
+            source = "search"
 
     material_text = ""
 
@@ -1091,7 +1205,7 @@ def main():
             material_text = "(搜索素材失败，请基于话题自行创作)"
     else:
         # Search mode: use AI to pick topic from Tavily trending
-        result = select_topic_via_search(search_client, recent_titles)
+        result = select_topic_via_search(search_client, recent_titles, recent_categories)
         if result is None:
             print("Topic selection via search failed, aborting", file=sys.stderr)
             state["last_run"] = now_dt.strftime("%Y-%m-%dT%H:%M:%S+08:00")
@@ -1161,6 +1275,14 @@ def main():
             d1_client.save_state(state)
             return 1
         print(f"Topic selected: {topic} (angle: {angle})")
+
+        # Post-selection diversity check: warn (don't fail) if the AI still
+        # picked a topic in the blocked category despite the hard constraint.
+        # We proceed anyway rather than aborting the whole run.
+        if blocked_cat and categorize_title(topic) == blocked_cat:
+            print(f"WARNING: selected topic is still in over-represented category "
+                  f"'{blocked_cat}' (diversity constraint was not honored). "
+                  f"Proceeding, but consider manual review.", file=sys.stderr)
 
         # Use the trending items as material, plus do a deep search
         material_text = items_text

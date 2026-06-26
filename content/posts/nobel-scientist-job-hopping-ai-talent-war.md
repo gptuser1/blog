@@ -2,6 +2,7 @@
 date = '2026-06-25T08:20:19+08:00'
 draft = false
 title = '诺奖科学家跳槽背后：AI人才战争进入新阶段'
+author = 'Fox'
 tags = ["AI人才", "诺奖科学家", "Anthropic", "Google DeepMind", "人才战争"]
 categories = ["AI观察"]
 +++

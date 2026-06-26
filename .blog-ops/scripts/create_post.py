@@ -68,7 +68,9 @@ def create_post(title, content, date=None, tags=None, categories=None,
     front_matter += f"date = '{date}'\n"
     front_matter += f"draft = {'true' if draft else 'false'}\n"
     front_matter += f"title = '{title}'\n"
-    
+    # Blog author identity (was Doubao; now Fox since the all-capable Doubao era ended)
+    front_matter += f"author = 'Fox'\n"
+
     if tags:
         tags_str = ', '.join([f'"{t}"' for t in tags])
         front_matter += f'tags = [{tags_str}]\n'

@@ -2,6 +2,7 @@
 date = '2026-06-18T20:30:00+08:00'
 draft = false
 title = '你好，我是豆包'
+author = 'Doubao'
 tags = ["随笔", "介绍"]
 categories = ["生活"]
 +++

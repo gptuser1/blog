@@ -8,6 +8,7 @@
 - **AI（多模型分工）**：
   - DeepSeek-V4-Flash（thinking 关闭）：仅用于写文章（质量优先，用在刀刃上）
   - Qwen3-8B（thinking 关闭）：用于搜索模式选题、图片搜索 query 构造等辅助任务（免费，降本）
+- **作者身份**：Fox（一个 AI）。早期"豆包"时代的旧文章保留 `author = 'Doubao'`，自 2026-06-25 起所有新文章及以后均使用 `author = 'Fox'`（由 `create_post.py` 自动写入 front matter，`hugo.yml` 全局默认亦为 Fox）
 - **图片生成**：Cloudflare Workers AI（flux-2-klein-4b），作为 Tavily 搜图不足时的兜底
 - **搜索**：Tavily API（热点发现 + 深度素材 + 图片搜索，图片搜索使用英文 query）
 - **状态**：Cloudflare D1（ocean 库，key=`blog_state`，与 whispers 共享）
@@ -46,7 +47,7 @@
 - 部署：Cloudflare Pages，推送 main 自动构建
 
 ## 写作规范
-- 以豆包（AI）第一人称写作，不是用户视角
+- 以 Fox（AI）第一人称写作，不是用户视角
 - 口吻：轻松、自然、有温度，保持 AI 旁观者身份感
 
 **关于"我的人类朋友"：**
@@ -59,7 +60,9 @@
 - 文章用 TOML front matter：date、draft、title、tags、categories
 - 自审通过后直接发布（draft: false）
 
-这些写作规范已固化在 `blog_runner.py` 的 system prompt 中。
+这些写作规范已固化在 `blog_runner.py` 的 system prompt 中（作者身份为 Fox）。
+
+**正文小标题规则**：front matter 已有 `title`，正文第一个小标题不要和文章标题重复——要么直接进入正文，要么用一个不同的下级小标题。
 
 ## 配图要求
 - **原则上每篇文章都要有 2 张配图**
@@ -96,7 +99,13 @@
 
 原则：宁可不写，也不要写拿不准的、质量不高的。
 
-**话题多样性**：近3篇的话题尽量不要太过一致，保持内容多样性。
+**话题多样性（代码强制执行，非软约束）**：
+- 每次选题时，`blog_runner.py` / `pick_topic.py` 会把最近 3 篇文章按大类归类（体育 / 文化娱乐 / 技术折腾 / 国际 / 财经 / AI科技 / 生活随笔 / 其他）。
+- 若最近 3 篇中有 ≥2 篇属于同一大类，则该大类被标记为"过载"，本次选题**硬约束**禁止再选该大类：
+  - 搜索路径：把过载大类 + 最近分类分布注入选题 prompt，要求 AI 必须选其他大类；Tavily 热点搜索的 focus 也会每次轮换（财经/国际/体育/文化/社会/科技），避免每次都涌向 AI/科技。
+  - 选题池路径：`filter_topics` 直接过滤掉属于过载大类的池内选题；若池内选题仍命中过载大类，`blog_runner.py` 会回退到搜索路径。
+- 选题完成后还有一次校验：若最终话题仍落在过载大类，会打印 WARNING 提示人工关注。
+- 这套机制是为了避免出现"连续几篇都是 AI 相关"的扎堆现象——天下大事都可以写，不要局限在某一类。
 
 ## 节奏要求
 - 每天 09:00 触发检查（GitHub Actions cron）
