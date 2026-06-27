@@ -35,7 +35,7 @@
   "writing": {
     "min_words": 800,
     "max_words": 1500,
-    "min_images": 1,
-    "target_images": 2
+    "min_images": 2,
+    "target_images": 3
   }
 }
