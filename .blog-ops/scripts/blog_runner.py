@@ -119,11 +119,11 @@ def should_publish(state, now_dt, config):
     # Other days: probabilistic
     # Higher chance if behind schedule
     if weekly_count < weekly_min:
-        prob = 0.6  # behind schedule, high chance
+        prob = 0.7  # behind schedule, high chance
     elif weekly_count < weekly_target:
-        prob = 0.35  # on track, moderate chance
+        prob = 0.5  # on track, moderate chance
     else:
-        prob = 0.1  # met target, low chance
+        prob = 0.3  # met target, low chance
 
     if random.random() < prob:
         return True, f"probabilistic trigger (p={prob}, count={weekly_count})"
@@ -281,6 +281,20 @@ def select_topic_via_search(search_client, recent_titles, saturated=None,
         "文化 电影 音乐 游戏",
         "社会 生活 民生",
         "科技 科学 发现",
+        "军事 航天 国防",
+        "商业 创业 公司",
+        "教育 学术 人才",
+        "能源 环保 气候",
+        "医疗 健康 生物",
+        "法律 政策 监管",
+        "自动驾驶 智能汽车 智能驾驶",
+        "农业 食品 粮食",
+        "房地产 基建 城市",
+        "AIGC 大模型 AI应用 人形机器人",
+        "消费 零售 品牌",
+        "旅游 户外 生活方式",
+        "哲学 心理 社科",
+        "AI硬件 CPO PCB 算力 半导体 存储",
     ]
     focus = random.choice(search_foci)
     query = f"近期热点新闻 {focus}"

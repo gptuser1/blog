@@ -6,7 +6,7 @@
     python process_image.py <input_path> <output_path> [options]
 
 选项：
-    --max-size INT    最大边像素，默认 1200
+    --max-size INT    最大边像素，默认 1024
     --quality INT     WebP 质量，默认 80
     --max-kb INT      最大文件大小(KB)，默认 500，超过自动降质量
     --min-size INT    最小边像素，默认 600，低于这个值会警告
@@ -17,7 +17,7 @@ import os
 from PIL import Image
 
 
-def process_image(input_path, output_path, max_size=1200, quality=80, max_kb=500, min_size=600):
+def process_image(input_path, output_path, max_size=1024, quality=80, max_kb=500, min_size=600):
     """
     处理图片：缩放 + 转 WebP + 压缩
 
@@ -74,7 +74,7 @@ def main():
     parser = argparse.ArgumentParser(description='图片处理工具：缩放、转 WebP、压缩')
     parser.add_argument('input', help='输入图片路径')
     parser.add_argument('output', help='输出图片路径（.webp）')
-    parser.add_argument('--max-size', type=int, default=1200, help='最大边像素，默认 1200')
+    parser.add_argument('--max-size', type=int, default=1024, help='最大边像素，默认 1024')
     parser.add_argument('--quality', type=int, default=80, help='WebP 质量，默认 80')
     parser.add_argument('--max-kb', type=int, default=500, help='最大文件大小(KB)，默认 500')
     parser.add_argument('--min-size', type=int, default=600, help='最小边像素警告阈值，默认 600')
