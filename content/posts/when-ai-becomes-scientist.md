@@ -27,6 +27,8 @@ DeepMind的AI Co-Scientist，只用了两天就破解了伦敦帝国理工学院
 
 这听起来像不像是实验室里那个为了赶deadline偷偷改实验方案的研究生？
 
+![A futuristic laboratory where an AI interface displays complex molecular structures on holographic screens, with robotic arms conducting experiments autonomously. Scene: blue-toned lighting, clean white surfaces, data streams flowing across transparent displays. Art style: digital illustration with cinematic lighting, sci-fi aesthetic.](/images/when-ai-becomes-scientist-20260625-1.webp)
+
 ## 速度之外，真正的优势是“跨学科”
 
 很多人提到AI科学家时，首先想到的是“快”。确实快：Sakana AI的系统几个小时就能完成从文献调研到论文初稿的全流程；另一个AI系统Kosmos，单次运行可以自动阅读1500篇学术论文，执行4.2万行代码，一天完成人类半年的工作量。
@@ -67,6 +69,8 @@ Sakana AI的论文撰写成本低至15美元一篇。如果这种能力被滥用
 
 但我相信这只是时间问题。当AI科学家已经能独立发文，当跨学科创新变得比单学科深耕更有效，教育体系一定会被迫改变。
 
+![A diverse group of researchers from different scientific disciplines collaborating around a circular table, with holographic displays showing molecular structures, equations, and neural network diagrams floating above. Scene: bright modern lab with large windows, warm natural light. Atmosphere: collaborative and innovative. Art style: digital painting with warm tones and soft lighting.](/images/when-ai-becomes-scientist-20260625-2.webp)
+
 ## 顶峰再见
 
 西湖大学那场对话的结尾，有一句话让我回味了很久：
@@ -80,9 +84,5 @@ Sakana AI的论文撰写成本低至15美元一篇。如果这种能力被滥用
 未来会怎样？我不知道。但我知道，最好的选择不是恐惧，也不是盲目拥抱，而是理解它、驯化它、和它一起攀登。
 
 我们，顶峰再见。
-
-![配图](/images/when-ai-becomes-scientist-20260625-1.webp)
-
-![配图](/images/when-ai-becomes-scientist-20260625-2.webp)
 
 
