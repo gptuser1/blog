@@ -403,47 +403,90 @@ def build_article_prompt(topic, material_text, recent_titles, target_images=3):
 slug 要求：英文小写、单词用连字符分隔、不超过 50 字符，概括文章主题。例如 "ai-scientist-paradox"、"world-cup-messi-hat-trick"。
 
 image_prompts 要求：{target_images}条英文图片描述（必须与占位符数量一致），用于 AI 生成配图。要求：
-1. 用具象名词描述画面（物体、场景、人物动作），4B 模型对具象名词响应好
-2. 不要用抽象形容词，要描述具体可见的画面
-3. 每条 prompt 必须用如下结构化字段格式输出（字段顺序固定，值留空时也要保留字段名）：
+1. 用具象名词描述画面，4B 模型对具象名词响应好，对抽象形容词响应差
+2. 博客话题跨度极大（体育人物/政策分析/科技产品/电影文化/地缘政治/医疗环保/AI硬件/旅游生活等），配图可能是人物场景、抽象概念、物体特写、地图图表等，不要假设一定有人物
+3. 每条 prompt 必须用如下统一字段格式输出（字段顺序固定，值留空时也要保留字段名并写 "none"）：
 
+    Subject:
+    Scene:
+    Objects:
     Action:
-    Object:
     Expression:
-    Setting:
+    Symbolism:
+    Composition:
     Time:
     Weather:
-    Environment details:
+    Environment:
     Mood:
     Palette:
     Lighting:
     Quality:
 
-    字段说明：
-    - Action: 画面中主体在做什么（动词短语，用具象名词）
-    - Object: 画面里出现的具体物件
-    - Expression: 人物/主体的神态
-    - Setting: 场景地点
-    - Time: 时间段
-    - Weather: 天气
-    - Environment details: 环境细节（家具、装饰、氛围元素）
-    - Mood: 情绪氛围
-    - Palette: 配色（暖色/冷色、具体色调）
-    - Lighting: 光线描述
-    - Quality: 画质风格（digital illustration, clean lines, 4k 等）
+    字段说明（【必填】所有图都要填；【可选】有则填，无则写 none）：
+    - Subject 【必填】：画面主体是什么（人/物体/场景/概念）。一句话点明主体，是整张图的焦点
+    - Scene 【必填】：场景/地点类型。如 home office / stadium / abstract background / studio / city street / map view
+    - Objects 【必填】：画面里出现的具体物件，逗号分隔。用具象名词
+    - Action 【可选】：人物/主体在做什么。仅当画面含人物或动态主体时填，否则 none
+    - Expression 【可选】：人物神态。仅当画面含人物时填，否则 none
+    - Symbolism 【可选】：抽象概念图所需的象征/隐喻元素。如用天平代表法律、齿轮代表工业、神经网络节点代表AI。仅当主题是抽象概念时填，否则 none
+    - Composition 【必填】：构图方式。如 close-up shot / wide shot / top-down view / centered / rule of thirds / flat lay
+    - Time 【必填】：时间段。daytime / evening / night / none（抽象图可 none）
+    - Weather 【必填】：天气或室内外。sunny / rainy / indoor / none（抽象图可 none）
+    - Environment 【必填】：环境细节（家具、装饰、背景元素、氛围道具）。抽象图填背景纹理/几何元素
+    - Mood 【必填】：情绪氛围。informative / warm / serious / energetic / calm / dramatic
+    - Palette 【必填】：配色。暖色/冷色、具体色调，如 warm oranges and browns / cool blues and greys / muted earth tones
+    - Lighting 【必填】：光线。soft even light / golden hour / dramatic side light / neon glow / flat studio light
+    - Quality 【必填】：画质风格。digital illustration, clean lines, 4k / realistic photo style / flat vector / watercolor
 
-    例如：
-    Action: a developer typing on a laptop at a wooden desk
-    Object: laptop, coffee cup, notebook, potted plant
-    Expression: focused, calm
-    Setting: cozy home office
-    Time: evening
-    Weather: rain outside
-    Environment details: bookshelf, warm lamp, window with rain drops
-    Mood: productive, warm
-    Palette: warm oranges, soft browns, creamy whites
-    Lighting: soft golden light from desk lamp, gentle glow on screen
-    Quality: digital illustration, clean lines, soft shading, 4k\""""
+    三种典型示例（按主题类型参考，不要照搬）：
+
+    【示例A：人物场景类（体育/生活/文化）】
+    Subject: a soccer player celebrating a goal
+    Scene: stadium pitch at night
+    Objects: soccer ball, goal net, confetti
+    Action: running with arms spread wide, mouth open shouting
+    Expression: ecstatic, triumphant
+    Symbolism: none
+    Composition: dynamic low angle shot
+    Time: night
+    Weather: clear
+    Environment: stadium floodlights, blurred crowd in background, green grass
+    Mood: energetic, triumphant
+    Palette: vibrant greens, bright white floodlights, colorful confetti
+    Lighting: strong stadium floodlights, dramatic shadows
+    Quality: digital illustration, dynamic composition, clean lines, 4k
+
+    【示例B：抽象概念类（政策/AI/经济/法律）】
+    Subject: concept of artificial intelligence regulation
+    Scene: abstract background
+    Objects: glowing neural network nodes, balance scale, document with checklist
+    Action: none
+    Expression: none
+    Symbolism: balance scale representing fairness, neural nodes representing AI, document representing regulation
+    Composition: centered, symmetrical
+    Time: none
+    Weather: none
+    Environment: dark gradient background, floating geometric shapes, subtle grid pattern
+    Mood: serious, informative
+    Palette: cool blues, deep purples, white highlights
+    Lighting: soft glow from nodes, even ambient light
+    Quality: digital illustration, clean lines, modern flat style, 4k
+
+    【示例C：物体特写类（科技产品/硬件/设备）】
+    Subject: a circuit board close-up
+    Scene: studio
+    Objects: green PCB, microchips, capacitors, solder points, copper traces
+    Action: none
+    Expression: none
+    Symbolism: none
+    Composition: macro close-up shot, shallow depth of field
+    Time: none
+    Weather: indoor
+    Environment: clean dark surface, subtle reflection underneath
+    Mood: informative, technical
+    Palette: green PCB, silver chips, gold traces, dark background
+    Lighting: focused directional light, soft reflections on metallic parts
+    Quality: realistic photo style, high detail, sharp focus, 4k\""""
 
     recent_text = "、".join(recent_titles) if recent_titles else "（暂无）"
     now_str = now_beijing().strftime("%Y-%m-%d %H:%M")
@@ -838,20 +881,24 @@ def build_fallback_image_prompt(slug):
 
     Uses the same labeled-field format as the article-generation prompt so the
     4B flux model gets concrete nouns in each slot instead of a free-text
-    sentence. The 4B model responds well to concrete nouns and structured
-    fields, weak on abstract adjectives.
+    sentence. Falls back to a concept/object style (no people) since the slug
+    alone gives no clue whether the topic is people-centric — a people-free
+    concept illustration is the safest default and works for most topics.
     """
     phrase = slug.replace("-", " ")
     return (
-        f"Action: {phrase}, depicted as a concept scene\n"
-        f"Object: relevant items and props for the topic\n"
-        f"Expression: neutral\n"
-        f"Setting: clean studio background\n"
-        f"Time: daytime\n"
+        f"Subject: concept illustration of {phrase}\n"
+        f"Scene: studio\n"
+        f"Objects: relevant items and props symbolizing the topic\n"
+        f"Action: none\n"
+        f"Expression: none\n"
+        f"Symbolism: objects arranged to represent the topic theme\n"
+        f"Composition: centered, balanced\n"
+        f"Time: none\n"
         f"Weather: indoor\n"
-        f"Environment details: minimal, focused on the subject\n"
+        f"Environment: clean minimal background, subtle gradient\n"
         f"Mood: informative, calm\n"
-        f"Palette: warm tones, soft contrast\n"
+        f"Palette: warm tones, soft contrast, muted accents\n"
         f"Lighting: soft even light, gentle highlights\n"
         f"Quality: digital illustration, clean lines, detailed rendering, 4k"
     )
