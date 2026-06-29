@@ -25,9 +25,7 @@ import re
 import subprocess
 import sys
 import random
-import urllib.request
-import urllib.error
-import uuid
+import requests
 from datetime import datetime, timezone, timedelta
 
 # Add scripts directory to path
@@ -570,12 +568,11 @@ def download_image(url, output_path):
     Validates Content-Type and actual image data to avoid saving HTML
     error pages or other non-image responses.
     """
-    req = urllib.request.Request(url)
-    req.add_header("User-Agent", "BlogRunner/1.0")
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            content_type = resp.headers.get("Content-Type", "").lower()
-            data = resp.read()
+        resp = requests.get(url, headers={"User-Agent": "BlogRunner/1.0"}, timeout=15)
+        resp.raise_for_status()
+        content_type = resp.headers.get("Content-Type", "").lower()
+        data = resp.content
         # Reject non-image content types
         if "image/" not in content_type and "octet-stream" not in content_type:
             print(f"Image skipped ({url}): not an image (Content-Type: {content_type})", file=sys.stderr)
@@ -592,7 +589,7 @@ def download_image(url, output_path):
         with open(output_path, "wb") as f:
             f.write(data)
         return True
-    except (urllib.error.URLError, OSError) as e:
+    except requests.exceptions.RequestException as e:
         print(f"Image download failed ({url}): {e}", file=sys.stderr)
         return False
 
@@ -676,32 +673,27 @@ def generate_image_cf(prompt, output_path, image_config):
 
     url = f"https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/run/{model}"
 
-    # Build multipart/form-data body
-    boundary = uuid.uuid4().hex
-    fields = {"prompt": prompt, "steps": "25", "width": "1024", "height": "768"}
-    body = b""
-    for name, value in fields.items():
-        body += f"--{boundary}\r\n".encode()
-        body += f'Content-Disposition: form-data; name="{name}"\r\n\r\n'.encode()
-        body += f"{value}\r\n".encode()
-    body += f"--{boundary}--\r\n".encode()
-
-    req = urllib.request.Request(url, data=body, method="POST")
-    req.add_header("Authorization", f"Bearer {api_token}")
-    req.add_header("Content-Type", f"multipart/form-data; boundary={boundary}")
+    # Use requests files parameter for multipart/form-data
+    files = {
+        "prompt": (None, prompt),
+        "steps": (None, "25"),
+        "width": (None, "1024"),
+        "height": (None, "768"),
+    }
+    headers = {"Authorization": f"Bearer {api_token}"}
 
     try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            result = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as e:
+        resp = requests.post(url, files=files, headers=headers, timeout=120)
+        result = resp.json()
+    except requests.exceptions.HTTPError as e:
         # CF returns 400 with JSON body when output is flagged (code 3030).
         # Parse the body so the caller can decide to retry with rephrasing.
         try:
-            result = json.loads(e.read().decode("utf-8"))
+            result = e.response.json()
         except Exception:
-            print(f"CF image gen failed: HTTP {e.code} {e.reason}", file=sys.stderr)
+            print(f"CF image gen failed: HTTP {e.response.status_code}", file=sys.stderr)
             return False, False
-    except Exception as e:
+    except requests.exceptions.RequestException as e:
         print(f"CF image gen failed: {e}", file=sys.stderr)
         return False, False
 

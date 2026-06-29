@@ -14,11 +14,9 @@ Usage:
     response = text_provider.generate(messages=[...])
 """
 
-import json
 import os
 import sys
-import urllib.request
-import urllib.error
+import requests
 from abc import ABC, abstractmethod
 
 
@@ -63,14 +61,14 @@ class WorkersAIText(TextProvider):
             "temperature": temperature,
         }
 
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(url, data=data, method="POST")
-        req.add_header("Authorization", f"Bearer {self.api_token}")
-        req.add_header("Content-Type", "application/json")
+        headers = {
+            "Authorization": f"Bearer {self.api_token}",
+            "Content-Type": "application/json",
+        }
 
         try:
-            with urllib.request.urlopen(req, timeout=180) as resp:
-                result = json.loads(resp.read().decode("utf-8"))
+            resp = requests.post(url, json=payload, headers=headers, timeout=180)
+            result = resp.json()
 
             if result.get("success"):
                 return result.get("result", {}).get("response", "").strip()
@@ -78,7 +76,7 @@ class WorkersAIText(TextProvider):
                 errors = result.get("errors", [])
                 err_msg = errors[0].get("message", "unknown error") if errors else "unknown error"
                 raise RuntimeError(f"WorkersAI error: {err_msg}")
-        except urllib.error.URLError as e:
+        except requests.exceptions.RequestException as e:
             raise RuntimeError(f"WorkersAI request failed: {e}")
 
 
@@ -106,19 +104,19 @@ class OpenAIText(TextProvider):
             "max_tokens": max_tokens,
             "temperature": temperature,
             "stream": False,
-            # Explicitly disable thinking mode to save tokens (esp. Qwen3)
-            "thinking": {"type": "disabled"},
+            # Explicitly disable thinking mode to save tokens (esp. Qwen3, DeepSeek)
             "enable_thinking": False,
         }
 
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(url, data=data, method="POST")
-        req.add_header("Authorization", f"Bearer {self.api_key}")
-        req.add_header("Content-Type", "application/json")
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
 
         try:
-            with urllib.request.urlopen(req, timeout=180) as resp:
-                result = json.loads(resp.read().decode("utf-8"))
+            resp = requests.post(url, json=payload, headers=headers, timeout=180)
+            resp.raise_for_status()
+            result = resp.json()
 
             # Log token usage from API response (DeepSeek/SiliconFlow return cache stats too)
             usage = result.get("usage") or {}
@@ -142,7 +140,7 @@ class OpenAIText(TextProvider):
                       file=sys.stderr)
 
             return result.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
-        except urllib.error.URLError as e:
+        except requests.exceptions.RequestException as e:
             raise RuntimeError(f"OpenAI request failed: {e}")
 
 

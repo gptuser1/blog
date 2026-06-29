@@ -10,8 +10,7 @@ sharing the ocean database with the whispers project.
 import json
 import os
 import sys
-import urllib.request
-import urllib.error
+import requests
 from datetime import datetime, timezone, timedelta
 
 
@@ -37,21 +36,21 @@ class D1Client:
         url = f"{self.api_url}/query"
         payload = {"query": sql, "params": params or []}
 
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(url, data=data, method="POST")
-        req.add_header("Authorization", f"Bearer {self.api_key}")
-        req.add_header("Content-Type", "application/json")
-        req.add_header("User-Agent", "BlogRunner/1.0")
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            "User-Agent": "BlogRunner/1.0",
+        }
 
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                result = json.loads(resp.read().decode("utf-8"))
+            resp = requests.post(url, json=payload, headers=headers, timeout=30)
+            result = resp.json()
 
             if not result.get("success", True) and "error" in result:
                 raise RuntimeError(f"D1 query error: {result['error']}")
 
             return result.get("results", [])
-        except urllib.error.URLError as e:
+        except requests.exceptions.RequestException as e:
             raise RuntimeError(f"D1 request failed: {e}")
 
     # ==================== State Management ====================

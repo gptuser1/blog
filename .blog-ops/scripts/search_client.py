@@ -20,8 +20,7 @@ Usage:
 import json
 import os
 import sys
-import urllib.request
-import urllib.error
+import requests
 
 
 class TavilyClient:
@@ -50,16 +49,16 @@ class TavilyClient:
         if time_range:
             payload["time_range"] = time_range
 
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(self.BASE_URL, data=data, method="POST")
-        req.add_header("Authorization", f"Bearer {self.api_key}")
-        req.add_header("Content-Type", "application/json")
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
 
         try:
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                result = json.loads(resp.read().decode("utf-8"))
-            return result
-        except urllib.error.URLError as e:
+            resp = requests.post(self.BASE_URL, json=payload, headers=headers, timeout=60)
+            resp.raise_for_status()
+            return resp.json()
+        except requests.exceptions.RequestException as e:
             raise RuntimeError(f"Tavily request failed: {e}")
         except json.JSONDecodeError as e:
             raise RuntimeError(f"Tavily response parse failed: {e}")

@@ -2,9 +2,8 @@
 
 ## 依赖列表
 
-只有图片处理脚本需要第三方库，其他脚本均使用 Python 标准库：
-
-- **Pillow** >= 9.0.0 —— 用于图片缩放、格式转换（process_image.py）
+- **Pillow** >= 9.0.0 —— 图片缩放、格式转换（process_image.py）
+- **requests** >= 2.25.0 —— HTTP 请求（ai_client.py, blog_runner.py, d1_client.py, search_client.py）
 
 ## 安装方法
 
@@ -12,14 +11,7 @@
 pip install -r requirements.txt
 ```
 
-或者直接安装：
-
-```bash
-pip install Pillow
-```
-
 ## 说明
 
 - `create_post.py` —— 仅使用标准库（os, argparse, re, datetime）
 - `lint_post.py` —— 仅使用标准库（os, argparse, re, datetime, sys）
-- `process_image.py` —— 需要 Pillow 库
