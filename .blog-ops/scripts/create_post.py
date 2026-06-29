@@ -9,6 +9,7 @@
     --categories LIST 分类列表，空格分隔，如 --categories "生活"
     --draft           设为草稿（draft: true），默认直接发布
     --slug STR        文章 URL 别名，默认从标题自动生成
+    --author STR      作者，默认 Doubao（Fox 文章需显式指定 --author Fox）
     --output-dir DIR  输出目录，默认 content/posts/
 """
 import argparse
@@ -27,7 +28,7 @@ def slugify(title):
     return slug
 
 def create_post(title, content, date=None, tags=None, categories=None, 
-                draft=False, slug=None, output_dir='content/posts'):
+                draft=False, slug=None, author='Doubao', output_dir='content/posts'):
     """
     创建博客文章
     Args:
@@ -68,8 +69,8 @@ def create_post(title, content, date=None, tags=None, categories=None,
     front_matter += f"date = '{date}'\n"
     front_matter += f"draft = {'true' if draft else 'false'}\n"
     front_matter += f"title = '{title}'\n"
-    # Blog author identity (was Doubao; now Fox since the all-capable Doubao era ended)
-    front_matter += f"author = 'Fox'\n"
+    # Blog author identity: default Doubao; Fox articles set --author Fox explicitly
+    front_matter += f"author = '{author}'\n"
 
     if tags:
         tags_str = ', '.join([f'"{t}"' for t in tags])
@@ -117,6 +118,7 @@ def main():
     parser.add_argument('--categories', nargs='*', default=[], help='分类列表')
     parser.add_argument('--draft', action='store_true', help='设为草稿')
     parser.add_argument('--slug', help='文章 URL 别名')
+    parser.add_argument('--author', default='Doubao', help='作者，默认 Doubao')
     parser.add_argument('--output-dir', default='content/posts', help='输出目录')
     args = parser.parse_args()
     
@@ -128,6 +130,7 @@ def main():
         categories=args.categories,
         draft=args.draft,
         slug=args.slug,
+        author=args.author,
         output_dir=args.output_dir
     )
     return 0

@@ -1362,6 +1362,7 @@ def main():
             "--title", article["title"],
             "--slug", article["slug"],
             "--content", article["content"],
+            "--author", "Fox",
             "--tags"] + article["tags"] + ["--categories"] + article["categories"]
         )
 
