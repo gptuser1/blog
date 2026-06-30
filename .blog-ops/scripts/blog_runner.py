@@ -1463,6 +1463,7 @@ def main():
 
     # ===== Step 2: Generate Article =====
     print("\n--- Step 2: Article Generation ---")
+    target_images = config.get("writing", {}).get("target_images", 3)
     article = generate_article(get_provider("default"), topic, material_text, recent_titles, target_images)
     if article is None:
         print("Article generation failed, aborting", file=sys.stderr)
@@ -1480,7 +1481,6 @@ def main():
 
     # ===== Step 3: Images =====
     print("\n--- Step 3: Images (Tavily search with EN query first, AI generation as fallback) ---")
-    target_images = config.get("writing", {}).get("target_images", 3)
     image_config = config.get("ai", {}).get("image", {})
     image_paths = fetch_images_hybrid(
         search_client, image_config, article, topic,
