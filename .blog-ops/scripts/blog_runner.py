@@ -220,7 +220,7 @@ def classify_recent_topics(recent_titles, ai_provider):
         {"role": "user", "content": user_prompt},
     ]
     try:
-        resp = ai_provider.generate(messages, max_tokens=256, temperature=0.2)
+        resp = ai_provider.generate(messages, max_tokens=256, temperature=0.2, enable_thinking=False)
         resp = resp.strip()
         if resp.startswith("```"):
             lines = resp.split("\n")
@@ -251,7 +251,7 @@ def _topic_in_domain(topic, domain, ai_provider):
         {"role": "user", "content": user_prompt},
     ]
     try:
-        resp = ai_provider.generate(messages, max_tokens=16, temperature=0.0)
+        resp = ai_provider.generate(messages, max_tokens=16, temperature=0.0, enable_thinking=False)
         return resp.strip().strip("`.").strip().lower().startswith("true")
     except Exception as e:
         print(f"[diversity] _topic_in_domain check failed: {e}", file=sys.stderr)
@@ -558,14 +558,14 @@ def generate_article(text_provider, topic, material_text, recent_titles, target_
     ]
 
     try:
-        response = text_provider.generate(messages, max_tokens=4096, temperature=0.85)
+        response = text_provider.generate(messages, max_tokens=4096, temperature=0.85, enable_thinking=False)
     except Exception as e:
         print(f"AI article generation failed (attempt 1): {e}", file=sys.stderr)
         # Retry once after a short pause
         import time
         time.sleep(5)
         try:
-            response = text_provider.generate(messages, max_tokens=4096, temperature=0.85)
+            response = text_provider.generate(messages, max_tokens=4096, temperature=0.85, enable_thinking=False)
             print("Retry succeeded")
         except Exception as e2:
             print(f"AI article generation failed (attempt 2): {e2}", file=sys.stderr)
@@ -822,7 +822,7 @@ Rules:
         {"role": "user", "content": user_prompt},
     ]
     try:
-        response = rephrase_provider.generate(messages, max_tokens=256, temperature=0.7)
+        response = rephrase_provider.generate(messages, max_tokens=256, temperature=0.7, enable_thinking=False)
         new_prompt = response.strip().strip('"`').strip()
         # Take first line, strip trailing period
         new_prompt = new_prompt.split("\n")[0].strip().rstrip(".")
@@ -974,7 +974,7 @@ Output the English search query:"""
         {"role": "user", "content": user_prompt},
     ]
     try:
-        response = query_provider.generate(messages, max_tokens=64, temperature=0.3)
+        response = query_provider.generate(messages, max_tokens=64, temperature=0.3, enable_thinking=False)
         query = response.strip().strip('"`').strip()
         # Sanity: take first line, strip trailing period
         query = query.split("\n")[0].strip().rstrip(".")
@@ -1376,7 +1376,7 @@ def main():
             {"role": "user", "content": user_prompt},
         ]
         try:
-            response = get_provider("free").generate(messages, max_tokens=256, temperature=0.8)
+            response = get_provider("free").generate(messages, max_tokens=256, temperature=0.8, enable_thinking=False)
         except Exception as e:
             print(f"AI topic selection failed: {e}", file=sys.stderr)
             state["last_run"] = now_dt.strftime("%Y-%m-%dT%H:%M:%S+08:00")

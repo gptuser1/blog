@@ -35,9 +35,8 @@ class TextProvider(ABC):
             max_tokens: max tokens to generate
             temperature: sampling temperature
             enable_thinking: whether to enable the model's thinking/reasoning
-                mode. Defaults to False (blog uses paid tokens and disables
-                thinking to save cost). Providers that don't support thinking
-                ignore this flag.
+                mode. Defaults to False — callers must explicitly opt in.
+                Providers that don't support thinking ignore this flag.
 
         Returns:
             str: generated text
@@ -238,5 +237,5 @@ if __name__ == "__main__":
 
     provider = create_text_provider(config)
     messages = [{"role": "user", "content": args.prompt}]
-    result = provider.generate(messages)
+    result = provider.generate(messages, enable_thinking=False)
     print(result)
