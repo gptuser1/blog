@@ -26,7 +26,7 @@ class TextProvider(ABC):
     """Abstract base class for text generation."""
 
     @abstractmethod
-    def generate(self, messages, max_tokens=1024, temperature=0.8):
+    def generate(self, messages, max_tokens=1024, temperature=0.8, enable_thinking=False):
         """
         Generate text from chat messages.
 
@@ -34,6 +34,10 @@ class TextProvider(ABC):
             messages: list of {"role": "system"/"user"/"assistant", "content": "..."}
             max_tokens: max tokens to generate
             temperature: sampling temperature
+            enable_thinking: whether to enable the model's thinking/reasoning
+                mode. Defaults to False (blog uses paid tokens and disables
+                thinking to save cost). Providers that don't support thinking
+                ignore this flag.
 
         Returns:
             str: generated text
@@ -52,13 +56,14 @@ class WorkersAIText(TextProvider):
         if not self.account_id or not self.api_token:
             raise ValueError("WorkersAI requires CF_DEFAULT_ACCOUNT_ID and CF_DEFAULT_API_TOKEN environment variables")
 
-    def generate(self, messages, max_tokens=1024, temperature=0.8):
+    def generate(self, messages, max_tokens=1024, temperature=0.8, enable_thinking=False):
         url = f"https://api.cloudflare.com/client/v4/accounts/{self.account_id}/ai/run/{self.model}"
 
         payload = {
             "messages": messages,
             "max_tokens": max_tokens,
             "temperature": temperature,
+            "chat_template_kwargs": { "enable_thinking": enable_thinking }
         }
 
         headers = {
@@ -95,7 +100,7 @@ class OpenAIText(TextProvider):
         self.last_usage = None
         self.usage_total = {"prompt": 0, "completion": 0, "total": 0, "cache_hit": 0}
 
-    def generate(self, messages, max_tokens=1024, temperature=0.8):
+    def generate(self, messages, max_tokens=1024, temperature=0.8, enable_thinking=False):
         url = f"{self.base_url}/chat/completions"
 
         payload = {
@@ -104,8 +109,8 @@ class OpenAIText(TextProvider):
             "max_tokens": max_tokens,
             "temperature": temperature,
             "stream": False,
-            # Explicitly disable thinking mode to save tokens (esp. Qwen3, DeepSeek)
-            "enable_thinking": False,
+            "thinking": {"type": "enabled" if enable_thinking else "disabled"},
+            "enable_thinking": enable_thinking,
         }
 
         headers = {
