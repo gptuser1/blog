@@ -507,6 +507,29 @@ image_prompts 要求：{target_images}条英文图片描述（必须与占位符
     return system_prompt, user_prompt
 
 
+def _decode_json_string(s):
+    """Decode a JSON string value's inner content (the part between quotes).
+
+    Handles \\uXXXX escapes WITHOUT corrupting UTF-8. The old code did
+    `s.encode().decode("unicode_escape")` which encodes the Python str to
+    UTF-8 bytes then decodes as latin1+escapes — that mangles multi-byte
+    CJK chars into mojibake (e.g. "当" -> "å½"). Here we only translate
+    \\uXXXX / \\n / \\t / \\\\ / \\" escapes and leave real UTF-8 chars alone.
+    """
+    def repl(m):
+        esc = m.group(1)
+        simple = {"n": "\n", "t": "\t", "r": "\r", '"': '"', "\\": "\\", "/": "/"}
+        if esc in simple:
+            return simple[esc]
+        if esc.startswith("u") and len(esc) == 5:
+            try:
+                return chr(int(esc[1:], 16))
+            except ValueError:
+                return m.group(0)
+        return m.group(0)
+    return re.sub(r'\\(u[0-9a-fA-F]{4}|[ntr"\\/])', repl, s)
+
+
 def _extract_json_fields(text):
     """
     Fallback: extract title/content/tags/categories from a malformed JSON
@@ -517,17 +540,28 @@ def _extract_json_fields(text):
     # title: "title": "..."  (stop at next top-level key or closing brace)
     m = re.search(r'"title"\s*:\s*"((?:[^"\\]|\\.)*)"', text)
     if m:
-        result["title"] = m.group(1).encode().decode("unicode_escape", errors="replace")
+        result["title"] = _decode_json_string(m.group(1))
 
     # slug: "slug": "..."
     m = re.search(r'"slug"\s*:\s*"((?:[^"\\]|\\.)*)"', text)
     if m:
-        result["slug"] = m.group(1).encode().decode("unicode_escape", errors="replace")
+        result["slug"] = _decode_json_string(m.group(1))
 
-    # content: "content": "..." up to "tags" or "categories" or end
-    m = re.search(r'"content"\s*:\s*"((?:[^"\\]|\\.)*)"', text, re.DOTALL)
+    # content: "content": "..." — match up to the next top-level key
+    # ("tags"/"categories") or end of object, so unescaped quotes inside the
+    # article body don't truncate it. The non-greedy .* stops at the first
+    # key boundary.
+    m = re.search(
+        r'"content"\s*:\s*"((?:[^"\\]|\\.)*?)"\s*,\s*"',
+        text, re.DOTALL,
+    )
     if m:
-        result["content"] = m.group(1).encode().decode("unicode_escape", errors="replace")
+        result["content"] = _decode_json_string(m.group(1))
+    else:
+        # Fallback: content is the last string field (no trailing key)
+        m = re.search(r'"content"\s*:\s*"((?:[^"\\]|\\.)*?)"\s*[}\n]', text, re.DOTALL)
+        if m:
+            result["content"] = _decode_json_string(m.group(1))
 
     # tags: "tags": ["a", "b", ...]
     m = re.search(r'"tags"\s*:\s*\[([^\]]*)\]', text)
