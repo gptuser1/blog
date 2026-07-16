@@ -40,7 +40,7 @@ from search_client import TavilyClient
 PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
 CONFIG_PATH = os.path.join(PROJECT_ROOT, ".blog-ops", "config.json")
 PUBLISH_LOG_PATH = os.path.join(PROJECT_ROOT, ".blog-ops", "publish-log.md")
-TOPICS_PATH = os.path.join(PROJECT_ROOT, ".blog-ops", "topics.md")
+TOPICS_PATH = os.path.join(PROJECT_ROOT, ".blog-ops", "topics.json")
 POSTS_DIR = os.path.join(PROJECT_ROOT, "content", "posts")
 IMAGES_DIR = os.path.join(PROJECT_ROOT, "static", "images")
 
@@ -160,18 +160,24 @@ def pick_topic_from_pool():
     return "search", content or "请搜索近期实时热点和新闻，选择一个值得写的话题。"
 
 
-def remove_topic_from_pool(topic):
+def remove_topic_from_pool(topic, pool_type=None):
     """Remove a topic from the pool after successful publish.
-    Calls pick_topic.py's removal logic via a direct import to avoid
-    spawning a subprocess just for deletion.
+    For queue topics, FIFO pop the first item.
+    For non_queue topics, match by content.
     """
     try:
         sys.path.insert(0, SCRIPT_DIR)
         import pick_topic as pt
-        removed = pt.remove_topic_from_pool(topic, TOPICS_PATH)
-        if removed:
-            print(f"Topic removed from pool: {topic}")
-        return removed
+        if pool_type == "queue":
+            removed_topic, removed = pt.remove_queue_first(TOPICS_PATH)
+            if removed:
+                print(f"Queue FIFO: removed '{removed_topic}' from queue")
+            return removed
+        else:
+            removed = pt.remove_topic_from_pool(topic, TOPICS_PATH)
+            if removed:
+                print(f"Topic removed from pool: {topic}")
+            return removed
     except Exception as e:
         print(f"Warning: failed to remove topic from pool: {e}", file=sys.stderr)
         return False
@@ -1246,7 +1252,7 @@ def git_commit_and_push():
     run_script(["git", "config", "user.email", "fox@example.com"])
 
     # Stage only content/static/publish-log (avoid touching theme submodule pointer)
-    run_script(["git", "add", "content", "static", ".blog-ops/publish-log.md", ".blog-ops/topics.md"])
+    run_script(["git", "add", "content", "static", ".blog-ops/publish-log.md", ".blog-ops/topics.json"])
 
     # Check if there are changes to commit
     result = subprocess.run(
@@ -1357,7 +1363,7 @@ def main():
 
     # ===== Step 1: Topic Selection =====
     print("\n--- Step 1: Topic Selection ---")
-    source, topic_content = pick_topic_from_pool()
+    source, pool_type, topic_content = pick_topic_from_pool()
     print(f"Topic source: {source}")
 
     # Diversity guard for the pool path: ask the AI whether the pool topic
@@ -1581,7 +1587,7 @@ def main():
     # ===== Step 6: Remove topic from pool (if from pool) =====
     if source == "pool":
         print("\n--- Step 6: Remove Topic from Pool ---")
-        remove_topic_from_pool(topic)
+        remove_topic_from_pool(topic, pool_type)
 
     # ===== Step 7: Update Publish Log =====
     print("\n--- Step 7: Update Publish Log ---")

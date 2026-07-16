@@ -1,192 +1,154 @@
 #!/usr/bin/env python3
 """
-选题工具：从选题池或实时搜索中选择写作话题
+选题工具：从选题池（JSON）或实时搜索中选择写作话题
 用法：
     python pick_topic.py [选项]
 选项：
     --pool-weight FLOAT    选题池权重，默认 0.7（70% 概率从选题池选）
     --diversity-count INT  考虑最近几篇的话题多样性，默认 3
-    --topics-path PATH     选题池文件路径，默认 .blog-ops/topics.md
+    --topics-path PATH     选题池文件路径，默认 .blog-ops/topics.json
     --log-path PATH        发布日志路径，默认 .blog-ops/publish-log.md
     --seed INT             随机种子（用于测试）
     --dry-run              只输出结果，不修改选题池（用于测试）
 输出：
     情况 A（选题池选中）：
         RESULT: pool
+        POOL_TYPE: queue | non_queue
         TOPIC: 选题标题
         REMOVED: true/false
     情况 B（需要搜索）：
         RESULT: search
         INSTRUCTION: 搜索指令文本
 
-注意：从选题池选中的话题会自动从选题池中删除，避免重复选中。
+选题池规则：
+    - queue（队列）：FIFO 顺序，优先消费，不参与多样性过滤
+    - non_queue（非队列）：随机选，参与多样性过滤
+    - 选题池整体占 pool_weight 概率（含 queue 和 non_queue）
 """
 import argparse
+import json
 import os
 import re
 import random
 import sys
 
 
-def parse_topics(topics_path):
+def read_topics(topics_path):
     """
-    解析选题池文件，返回待写主题列表
+    读取 JSON 选题池，返回 (queue, non_queue) 列表
     """
-    topics = []
-    
+    queue = []
+    non_queue = []
+
     if not os.path.exists(topics_path):
-        return topics
-    
-    with open(topics_path, 'r', encoding='utf-8') as f:
-        lines = f.readlines()
-    
-    in_pending = False
-    for line in lines:
-        line_stripped = line.strip()
-        
-        # 找到"待写主题"章节
-        if line_stripped.startswith('## 待写主题'):
-            in_pending = True
-            continue
-        
-        if in_pending and line_stripped.startswith('## '):
-            # 遇到下一个章节，结束
-            break
-        
-        if in_pending and line_stripped.startswith('- '):
-            topic = line_stripped[2:].strip()
-            if topic:
-                topics.append(topic)
-    
-    return topics
+        return queue, non_queue
+
+    try:
+        with open(topics_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        queue = data.get("queue", [])
+        non_queue = data.get("non_queue", [])
+    except (json.JSONDecodeError, IOError):
+        pass
+
+    return queue, non_queue
+
+
+def write_topics(topics_path, queue, non_queue):
+    """写入 JSON 选题池"""
+    data = {"queue": queue, "non_queue": non_queue}
+    with open(topics_path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+def remove_queue_first(topics_path):
+    """
+    从队列中移除第一条（FIFO pop）
+    Returns:
+        (topic, bool): (被移除的选题, 是否成功)
+    """
+    queue, non_queue = read_topics(topics_path)
+    if not queue:
+        return None, False
+    topic = queue.pop(0)
+    write_topics(topics_path, queue, non_queue)
+    return topic, True
 
 
 def remove_topic_from_pool(topic, topics_path):
     """
-    从选题池中删除指定的话题
+    从选题池中删除指定话题（内容匹配，queue 和 non_queue 都查）
     Returns:
         bool: 是否成功删除
     """
-    if not os.path.exists(topics_path):
-        return False
-    
-    with open(topics_path, 'r', encoding='utf-8') as f:
-        lines = f.readlines()
-    
-    in_pending = False
-    new_lines = []
+    queue, non_queue = read_topics(topics_path)
     removed = False
-    
-    for line in lines:
-        line_stripped = line.strip()
-        
-        # 找到"待写主题"章节
-        if line_stripped.startswith('## 待写主题'):
-            in_pending = True
-            new_lines.append(line)
-            continue
-        
-        if in_pending and line_stripped.startswith('## '):
-            # 遇到下一个章节，结束
-            in_pending = False
-            new_lines.append(line)
-            continue
-        
-        if in_pending and line_stripped.startswith('- '):
-            topic_text = line_stripped[2:].strip()
-            if topic_text == topic and not removed:
-                # 跳过这一行，即删除
-                removed = True
-                continue
-        
-        new_lines.append(line)
-    
+
+    if topic in queue:
+        queue.remove(topic)
+        removed = True
+    elif topic in non_queue:
+        non_queue.remove(topic)
+        removed = True
+
     if removed:
-        with open(topics_path, 'w', encoding='utf-8') as f:
-            f.writelines(new_lines)
-    
+        write_topics(topics_path, queue, non_queue)
+
     return removed
 
 
 def parse_publish_log(log_path, count=3):
-    """
-    解析发布日志，返回最近 N 篇的主题摘要列表
-    """
+    """解析发布日志，返回最近 N 篇的主题摘要列表"""
     recent_topics = []
-    
+
     if not os.path.exists(log_path):
         return recent_topics
-    
+
     with open(log_path, 'r', encoding='utf-8') as f:
         lines = f.readlines()
-    
+
     in_publish = False
     for line in lines:
         line = line.strip()
-        
-        # 找到"发布记录"章节
+
         if line.startswith('## 发布记录'):
             in_publish = True
             continue
-        
+
         if in_publish and line.startswith('## '):
-            # 遇到下一个章节，结束
             break
-        
+
         if in_publish and line.startswith('- '):
-            # 解析格式：- 2026-06-21：《标题》— 简要说明
-            # 提取标题和简要说明
             match = re.search(r'《(.+?)》', line)
             if match:
                 title = match.group(1)
                 recent_topics.append(title)
-            
-            # 如果提取不到标题，用整行
             if not match:
                 recent_topics.append(line)
-            
             if len(recent_topics) >= count:
                 break
-    
+
     return recent_topics
 
 
 def is_topic_repeated(topic, recent_topics):
-    """
-    简单判断选题是否和最近文章重复
-    基于关键词重叠的简单判断
-    """
-    # 提取选题的关键词（简单分词：按标点和空格拆分）
+    """判断选题是否和最近文章重复（基于关键词重叠）"""
     topic_keywords = set(re.findall(r'[\w\u4e00-\u9fff]+', topic.lower()))
 
     for recent in recent_topics:
         recent_keywords = set(re.findall(r'[\w\u4e00-\u9fff]+', recent.lower()))
-
-        # 计算关键词重叠率
         if not topic_keywords or not recent_keywords:
             continue
-
         overlap = topic_keywords & recent_keywords
         overlap_ratio = len(overlap) / min(len(topic_keywords), len(recent_keywords))
-
-        # 如果重叠率超过 50%，认为是重复话题
         if overlap_ratio > 0.5:
             return True
 
     return False
 
 
-# Note: domain-level diversity (e.g. "too many AI articles in a row") is NOT
-# done with keyword arrays here. The pool path only filters exact topic
-# repetition via keyword overlap below; cross-article domain diversity for
-# the search path is handled by blog_runner.py using the AI (Qwen3-8B) to
-# classify recent titles and flag a saturated domain. This keeps the logic
-# robust to new topics without maintaining a brittle keyword list.
 def filter_topics(topics, recent_topics):
-    """
-    过滤掉和最近文章重复的选题（基于关键词重叠）。
-    大类级别的多样性约束由 blog_runner.py 通过 AI 判断处理，不在此处用关键词数组。
-    """
+    """过滤掉和最近文章重复的选题"""
     filtered = []
     for topic in topics:
         if not is_topic_repeated(topic, recent_topics):
@@ -194,28 +156,29 @@ def filter_topics(topics, recent_topics):
     return filtered
 
 
-def pick_topic(pool_weight=0.7, diversity_count=3, topics_path='.blog-ops/topics.md', 
+def pick_topic(pool_weight=0.7, diversity_count=3,
+               topics_path='.blog-ops/topics.json',
                log_path='.blog-ops/publish-log.md', seed=None):
     """
     主逻辑：选择选题
     Returns:
-        (result_type, content)
+        (result_type, pool_type, content)
         result_type: 'pool' or 'search'
-        content: topic string (pool) or instruction string (search)
+        pool_type: 'queue' / 'non_queue' / None
+        content: topic string or instruction string
     """
-    # 设置随机种子
     if seed is not None:
         random.seed(seed)
-    
-    # 解析选题池
-    topics = parse_topics(topics_path)
-    
+
+    # 读取选题池
+    queue, non_queue = read_topics(topics_path)
+
     # 解析最近发布记录
     recent_topics = parse_publish_log(log_path, diversity_count)
-    
-    # 过滤重复选题
-    filtered_topics = filter_topics(topics, recent_topics)
-    
+
+    # 非队列选题参与多样性过滤；队列选题不受过滤（用户显式要求）
+    filtered_non_queue = filter_topics(non_queue, recent_topics)
+
     # 搜索指令
     search_instruction = (
         "请搜索近期实时热点和新闻，选择一个值得写的话题进行创作。"
@@ -224,28 +187,30 @@ def pick_topic(pool_weight=0.7, diversity_count=3, topics_path='.blog-ops/topics
         "AI热点等，但不局限于这些方向，天下大事都可以写。"
         "优先选择有热度、有讨论价值的实时话题，注意避开最近3篇写过的重复方向。"
     )
-    
-    # 如果选题池为空，直接返回搜索
-    if not filtered_topics:
-        return 'search', search_instruction
-    
-    # 加权随机决策
+
+    # 选题池整体占 pool_weight 概率
     if random.random() < pool_weight:
-        # 从选题池随机选一个
-        selected = random.choice(filtered_topics)
-        return 'pool', selected
+        # 选题池路径：队列优先
+        if queue:
+            # 队列 FIFO，取第一条
+            return 'pool', 'queue', queue[0]
+        elif filtered_non_queue:
+            selected = random.choice(filtered_non_queue)
+            return 'pool', 'non_queue', selected
+        else:
+            # 选题池为空，走搜索
+            return 'search', None, search_instruction
     else:
-        # 返回搜索指令
-        return 'search', search_instruction
+        return 'search', None, search_instruction
 
 
 def main():
     parser = argparse.ArgumentParser(description='选题工具：从选题池或实时搜索中选择写作话题')
-    parser.add_argument('--pool-weight', type=float, default=0.7, 
+    parser.add_argument('--pool-weight', type=float, default=0.7,
                         help='选题池权重，默认 0.7（70%% 概率从选题池选）')
     parser.add_argument('--diversity-count', type=int, default=3,
                         help='考虑最近几篇的话题多样性，默认 3')
-    parser.add_argument('--topics-path', default='.blog-ops/topics.md',
+    parser.add_argument('--topics-path', default='.blog-ops/topics.json',
                         help='选题池文件路径')
     parser.add_argument('--log-path', default='.blog-ops/publish-log.md',
                         help='发布日志路径')
@@ -258,7 +223,7 @@ def main():
     args = parser.parse_args()
 
     # 执行选题
-    result_type, content = pick_topic(
+    result_type, pool_type, content = pick_topic(
         pool_weight=args.pool_weight,
         diversity_count=args.diversity_count,
         topics_path=args.topics_path,
@@ -266,22 +231,28 @@ def main():
         seed=args.seed
     )
 
-    # 输出结果
     if result_type == 'pool':
         print(f'RESULT: pool')
+        print(f'POOL_TYPE: {pool_type}')
         print(f'TOPIC: {content}')
 
-        # 如果不是 dry-run 且不是 no-remove，从选题池中删除
         if not args.dry_run and not args.no_remove:
-            removed = remove_topic_from_pool(content, args.topics_path)
-            print(f'REMOVED: {"true" if removed else "false"}')
+            if pool_type == 'queue':
+                # FIFO：pop 第一条
+                removed_topic, removed = remove_queue_first(args.topics_path)
+                print(f'REMOVED: {"true" if removed else "false"}')
+            else:
+                removed = remove_topic_from_pool(content, args.topics_path)
+                print(f'REMOVED: {"true" if removed else "false"}')
         else:
-            print(f'REMOVED: false ({'dry-run' if args.dry_run else 'no-remove'})')
+            reason = 'dry-run' if args.dry_run else 'no-remove'
+            print(f'REMOVED: false ({reason})')
 
         return 0
     else:
         print(f'RESULT: search')
-        print(f'INSTRUCTION: {content}')
+        if content:
+            print(f'INSTRUCTION: {content}')
         return 0
 
 
