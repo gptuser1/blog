@@ -7,7 +7,7 @@
     --pool-weight FLOAT    选题池权重，默认 0.7（70% 概率从选题池选）
     --diversity-count INT  考虑最近几篇的话题多样性，默认 3
     --topics-path PATH     选题池文件路径，默认 .blog-ops/topics.json
-    --log-path PATH        发布日志路径，默认 .blog-ops/publish-log.md
+    --log-path PATH        发布日志路径，默认 .blog-ops/publish-log.json
     --seed INT             随机种子（用于测试）
     --dry-run              只输出结果，不修改选题池（用于测试）
 输出：
@@ -98,35 +98,24 @@ def remove_topic_from_pool(topic, topics_path):
 
 
 def parse_publish_log(log_path, count=3):
-    """解析发布日志，返回最近 N 篇的主题摘要列表"""
+    """解析发布日志（JSON），返回最近 N 篇有标题的文章标题列表"""
     recent_topics = []
 
     if not os.path.exists(log_path):
         return recent_topics
 
-    with open(log_path, 'r', encoding='utf-8') as f:
-        lines = f.readlines()
-
-    in_publish = False
-    for line in lines:
-        line = line.strip()
-
-        if line.startswith('## 发布记录'):
-            in_publish = True
-            continue
-
-        if in_publish and line.startswith('## '):
-            break
-
-        if in_publish and line.startswith('- '):
-            match = re.search(r'《(.+?)》', line)
-            if match:
-                title = match.group(1)
+    try:
+        with open(log_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        records = data.get("publish_records", [])
+        for record in records:
+            title = record.get("title", "")
+            if title:  # 只取有标题的记录（跳过自动执行占位行）
                 recent_topics.append(title)
-            if not match:
-                recent_topics.append(line)
             if len(recent_topics) >= count:
                 break
+    except (json.JSONDecodeError, IOError):
+        pass
 
     return recent_topics
 
@@ -212,7 +201,7 @@ def main():
                         help='考虑最近几篇的话题多样性，默认 3')
     parser.add_argument('--topics-path', default='.blog-ops/topics.json',
                         help='选题池文件路径')
-    parser.add_argument('--log-path', default='.blog-ops/publish-log.md',
+    parser.add_argument('--log-path', default='.blog-ops/publish-log.json',
                         help='发布日志路径')
     parser.add_argument('--seed', type=int, default=None,
                         help='随机种子（用于测试）')

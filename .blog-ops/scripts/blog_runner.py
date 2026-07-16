@@ -39,7 +39,7 @@ from search_client import TavilyClient
 # Paths
 PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
 CONFIG_PATH = os.path.join(PROJECT_ROOT, ".blog-ops", "config.json")
-PUBLISH_LOG_PATH = os.path.join(PROJECT_ROOT, ".blog-ops", "publish-log.md")
+PUBLISH_LOG_PATH = os.path.join(PROJECT_ROOT, ".blog-ops", "publish-log.json")
 TOPICS_PATH = os.path.join(PROJECT_ROOT, ".blog-ops", "topics.json")
 POSTS_DIR = os.path.join(PROJECT_ROOT, "content", "posts")
 IMAGES_DIR = os.path.join(PROJECT_ROOT, "static", "images")
@@ -184,18 +184,23 @@ def remove_topic_from_pool(topic, pool_type=None):
 
 
 def get_recent_titles(count=3):
-    """Get recent article titles from publish-log.md."""
+    """Get recent article titles from publish-log.json."""
     titles = []
     if not os.path.exists(PUBLISH_LOG_PATH):
         return titles
 
-    with open(PUBLISH_LOG_PATH, "r", encoding="utf-8") as f:
-        for line in f:
-            match = re.search(r'《(.+?)》', line)
-            if match:
-                titles.append(match.group(1))
+    try:
+        with open(PUBLISH_LOG_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        records = data.get("publish_records", [])
+        for record in records:
+            title = record.get("title", "")
+            if title:
+                titles.append(title)
             if len(titles) >= count:
                 break
+    except (json.JSONDecodeError, IOError):
+        pass
     return titles
 
 
@@ -1135,112 +1140,38 @@ def insert_images_into_content(content, image_paths):
 # ==================== Publish Log ====================
 
 def update_publish_log(title, summary, published=True):
-    """Update publish-log.md with today's entry."""
+    """Update publish-log.json with today's entry."""
     today = now_beijing().strftime("%Y-%m-%d")
-    status = f"《{title}》— {summary}" if published else "今日未更新"
 
     if not os.path.exists(PUBLISH_LOG_PATH):
-        with open(PUBLISH_LOG_PATH, "w", encoding="utf-8") as f:
-            f.write("# 发布日志\n记录每天发布的文章，以及任务执行情况。\n## 发布记录\n")
+        data = {"publish_records": [], "execution_records": []}
+    else:
+        try:
+            with open(PUBLISH_LOG_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, IOError):
+            data = {"publish_records": [], "execution_records": []}
 
-    with open(PUBLISH_LOG_PATH, "r", encoding="utf-8") as f:
-        lines = f.readlines()
+    # Add publish record
+    publish_record = {
+        "date": today,
+        "title": title if published else "",
+        "summary": summary if published else "今日未更新"
+    }
+    data.setdefault("publish_records", []).insert(0, publish_record)
 
-    # Find "## 发布记录" section
-    publish_start = None
-    exec_start = None
-    for i, line in enumerate(lines):
-        if line.strip() == "## 发布记录":
-            publish_start = i
-        elif line.strip() == "## 执行记录":
-            exec_start = i
-
-    if publish_start is None:
-        # Add section
-        lines.append("## 发布记录\n")
-        publish_start = len(lines) - 1
-
-    # Insert new entry after the section header
-    insert_pos = publish_start + 1
-    new_entry = f"- {today}：{status}\n"
-    lines.insert(insert_pos, new_entry)
+    # Keep only last 30 publish records
+    data["publish_records"] = data["publish_records"][:30]
 
     # Add execution record
-    if exec_start is None:
-        lines.append("\n## 执行记录\n")
-        exec_start = len(lines) - 1
+    exec_record = {
+        "date": today,
+        "action": f"GitHub Actions 自动执行，{'成功发布' if published else '未发布'}文章"
+    }
+    data.setdefault("execution_records", []).insert(0, exec_record)
 
-    exec_entry = f"- {today}：GitHub Actions 自动执行，{'成功发布' if published else '未发布'}文章\n"
-    # Find end of exec records
-    exec_insert = exec_start + 1
-    lines.insert(exec_insert, exec_entry)
-
-    # Trim publish records to last 30
-    if publish_start is not None and exec_start is not None:
-        pub_lines = []
-        other_lines = []
-        section = "before"
-        for line in lines:
-            if line.strip() == "## 发布记录":
-                section = "publish"
-                other_lines.append(line)
-                continue
-            elif line.strip() == "## 执行记录":
-                section = "exec"
-                other_lines.append(line)
-                continue
-
-            if section == "publish":
-                pub_lines.append(line)
-            else:
-                other_lines.append(line)
-
-        # Keep only last 30 publish entries
-        pub_entries = [l for l in pub_lines if l.strip().startswith("- ")]
-        if len(pub_entries) > 30:
-            # Rebuild publish section
-            new_pub = []
-            kept = set(pub_entries[-30:])
-            for l in pub_lines:
-                if l.strip().startswith("- "):
-                    if l in kept:
-                        new_pub.append(l)
-                else:
-                    new_pub.append(l)
-            pub_lines = new_pub
-
-        lines = other_lines[:publish_start + 1] if publish_start < len(other_lines) else []
-        # Simpler: just write all
-        with open(PUBLISH_LOG_PATH, "w", encoding="utf-8") as f:
-            # Reconstruct
-            result_lines = []
-            in_publish = False
-            in_exec = False
-            pub_written = False
-            for line in other_lines:
-                stripped = line.strip()
-                if stripped == "## 发布记录":
-                    in_publish = True
-                    in_exec = False
-                    result_lines.append(line)
-                    if not pub_written:
-                        result_lines.extend(pub_lines)
-                        pub_written = True
-                    continue
-                elif stripped == "## 执行记录":
-                    in_publish = False
-                    in_exec = True
-                    result_lines.append(line)
-                    continue
-
-                if in_publish:
-                    continue  # skip old publish lines, we added new ones
-                result_lines.append(line)
-
-            f.writelines(result_lines)
-    else:
-        with open(PUBLISH_LOG_PATH, "w", encoding="utf-8") as f:
-            f.writelines(lines)
+    with open(PUBLISH_LOG_PATH, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
 
 # ==================== Git Operations ====================
