@@ -147,7 +147,7 @@ def filter_topics(topics, recent_topics):
 
 def pick_topic(pool_weight=0.7, diversity_count=3,
                topics_path='.blog-ops/topics.json',
-               log_path='.blog-ops/publish-log.md', seed=None):
+               log_path='.blog-ops/publish-log.json', seed=None):
     """
     主逻辑：选择选题
     Returns:

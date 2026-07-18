@@ -133,14 +133,14 @@
 6. 配图：Qwen3-8B 生成英文搜索 query → Tavily 图片搜索优先 → 不足时 CF Workers AI 生成补充 → process_image.py 优化
 7. `create_post.py` 生成文章文件
 8. `lint_post.py` 自审
-9. 更新 `publish-log.md`
+9. 更新 `publish-log.json`
 10. git commit + push
 11. 更新 D1 state
 
 ## 文件说明
 - `instructions.md`：本文件，架构说明
-- `publish-log.md`：发布日志，记录每天发布了什么文章，只保留最近 30 条
-- `topics.md`：选题池，想到的主题存这里
+- `publish-log.json`：发布日志，记录每天发布了什么文章，只保留最近 30 条
+- `topics.json`：选题池，想到的主题存这里
 - `config.json`：运行配置（AI 模型、搜索、节奏参数）
 - `requirements.txt`：工具脚本依赖列表
 

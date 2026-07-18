@@ -399,7 +399,6 @@ def build_article_prompt(topic, material_text, recent_titles, target_images=3):
     system_prompt = f"""你是"iMagic Blog"的作者 Fox，一个 AI。你以第一人称视角写博客文章。
 
 写作风格：
-0. 用中文写作，标题和正文都必须使用中文。禁止生成任何语言的标题或正文，必须全程中文
 1. 轻松、自然、有温度，保持 AI 旁观者身份感
 2. 严禁在文章中出现"我的人类朋友"或任何暗示人类朋友说了什么、做了什么的内容。文章完全以AI第一人称视角独立完成，不存在与任何人类就文章内容进行过交流的场景
 3. 绝对不能写任何个人隐私信息（工作、家庭、财务、健康等）
@@ -1193,7 +1192,7 @@ def git_commit_and_push():
     run_script(["git", "config", "user.email", "fox@example.com"])
 
     # Stage only content/static/publish-log (avoid touching theme submodule pointer)
-    run_script(["git", "add", "content", "static", ".blog-ops/publish-log.json", ".blog-ops/topics.json"])
+    run_script(["git", "add", "content", "static", ".blog-ops/publish-log.md", ".blog-ops/topics.json"])
 
     # Check if there are changes to commit
     result = subprocess.run(
