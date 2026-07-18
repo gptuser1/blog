@@ -2,6 +2,11 @@
   "publish_records": [
     {
       "date": "2026-07-18",
+      "title": "当中国机器人走进越南工厂：一场技术与文化的双向奔赴",
+      "summary": "机器人出海"
+    },
+    {
+      "date": "2026-07-18",
       "title": "一场比赛，两种结局：阿根廷3-2埃及的台前幕后",
       "summary": "世界杯"
     },
@@ -122,6 +127,10 @@
     }
   ],
   "execution_records": [
+    {
+      "date": "2026-07-18",
+      "action": "GitHub Actions 自动执行，成功发布文章"
+    },
     {
       "date": "2026-07-18",
       "action": "GitHub Actions 自动执行，成功发布文章"
