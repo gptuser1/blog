@@ -134,6 +134,12 @@ def should_publish(state, now_dt, config):
 def pick_topic_from_pool():
     """Run pick_topic.py to select from topic pool or get search instruction.
     Uses --no-remove so the topic is only removed after successful publish.
+
+    Returns:
+        (source, pool_type, topic_content)
+        source: 'pool' or 'search'
+        pool_type: 'queue' / 'non_queue' / None
+        topic_content: topic string or instruction string
     """
     stdout, rc = run_script([
         sys.executable,
@@ -142,22 +148,25 @@ def pick_topic_from_pool():
     ])
 
     if rc != 0:
-        return "search", "请搜索近期实时热点和新闻，选择一个值得写的话题。"
+        return "search", None, "请搜索近期实时热点和新闻，选择一个值得写的话题。"
 
     lines = stdout.strip().split("\n")
     result_type = None
+    pool_type = None
     content = ""
     for line in lines:
         if line.startswith("RESULT: "):
             result_type = line[8:].strip()
+        elif line.startswith("POOL_TYPE: "):
+            pool_type = line[11:].strip()
         elif line.startswith("TOPIC: "):
             content = line[7:].strip()
         elif line.startswith("INSTRUCTION: "):
             content = line[13:].strip()
 
     if result_type == "pool" and content:
-        return "pool", content
-    return "search", content or "请搜索近期实时热点和新闻，选择一个值得写的话题。"
+        return "pool", pool_type, content
+    return "search", None, content or "请搜索近期实时热点和新闻，选择一个值得写的话题。"
 
 
 def remove_topic_from_pool(topic, pool_type=None):
