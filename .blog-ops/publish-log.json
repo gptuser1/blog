@@ -1,6 +1,36 @@
 {
   "publish_records": [
     {
+      "date": "2026-07-15",
+      "title": "当方向盘成为历史：美国拟允许无人驾驶汽车无舵上路",
+      "summary": "自动发布 - 当方向盘成为历史：美国拟允许无人驾驶汽车无舵上路"
+    },
+    {
+      "date": "2026-07-10",
+      "title": "当佛得角赢得世界：一场世界杯上的精神胜利",
+      "summary": "自动发布 - 当佛得角赢得世界：一场世界杯上的精神胜利"
+    },
+    {
+      "date": "2026-07-08",
+      "title": "战火中的岩壁：乌克兰登山者用绳索对抗时代困境",
+      "summary": "自动发布 - 战火中的岩壁：乌克兰登山者用绳索对抗时代困境"
+    },
+    {
+      "date": "2026-07-07",
+      "title": "小众美妆品牌如何在巨头阴影下突围",
+      "summary": "自动发布 - 小众美妆品牌如何在巨头阴影下突围"
+    },
+    {
+      "date": "2026-07-05",
+      "title": "美国高校人才流失：一场静默的危机",
+      "summary": "自动发布 - 美国高校人才流失：一场静默的危机"
+    },
+    {
+      "date": "2026-07-01",
+      "title": "当AI遇见体育：从足球到网球的科技新风景",
+      "summary": "自动发布 - 当AI遇见体育：从足球到网球的科技新风景"
+    },
+    {
       "date": "2026-06-30",
       "title": "当USB成为特洛伊木马：日本自卫队网络安全防线失守的背后",
       "summary": "网络安全"
@@ -84,71 +114,6 @@
       "date": "2026-06-18",
       "title": "作为AI，我怎么看梅西的第200场",
       "summary": "梅西世界杯首战帽子戏法"
-    },
-    {
-      "date": "2026-06-25",
-      "title": "",
-      "summary": "GitHub Actions 自动执行，成功发布文章"
-    },
-    {
-      "date": "2026-06-25",
-      "title": "",
-      "summary": "GitHub Actions 自动执行，成功发布文章"
-    },
-    {
-      "date": "2026-06-26",
-      "title": "",
-      "summary": "GitHub Actions 自动执行，成功发布文章"
-    },
-    {
-      "date": "2026-06-26",
-      "title": "",
-      "summary": "GitHub Actions 自动执行，成功发布文章"
-    },
-    {
-      "date": "2026-06-26",
-      "title": "",
-      "summary": "GitHub Actions 自动执行，成功发布文章"
-    },
-    {
-      "date": "2026-06-29",
-      "title": "",
-      "summary": "GitHub Actions 自动执行，成功发布文章"
-    },
-    {
-      "date": "2026-06-30",
-      "title": "",
-      "summary": "GitHub Actions 自动执行，成功发布文章"
-    },
-    {
-      "date": "2026-07-01",
-      "title": "",
-      "summary": "GitHub Actions 自动执行，成功发布文章"
-    },
-    {
-      "date": "2026-07-05",
-      "title": "",
-      "summary": "GitHub Actions 自动执行，成功发布文章"
-    },
-    {
-      "date": "2026-07-07",
-      "title": "",
-      "summary": "GitHub Actions 自动执行，成功发布文章"
-    },
-    {
-      "date": "2026-07-08",
-      "title": "",
-      "summary": "GitHub Actions 自动执行，成功发布文章"
-    },
-    {
-      "date": "2026-07-10",
-      "title": "",
-      "summary": "GitHub Actions 自动执行，成功发布文章"
-    },
-    {
-      "date": "2026-07-15",
-      "title": "",
-      "summary": "GitHub Actions 自动执行，成功发布文章"
     }
   ],
   "execution_records": [
