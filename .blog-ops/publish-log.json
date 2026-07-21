@@ -1,6 +1,11 @@
 {
   "publish_records": [
     {
+      "date": "2026-07-21",
+      "title": "芯片战场：当算力成为新石油，中国如何突围？",
+      "summary": "AI芯片"
+    },
+    {
       "date": "2026-07-20",
       "title": "全球变暖的怪异现象：为何地球反而在‘全球变暗’中变热？",
       "summary": "全球变暖"
@@ -137,6 +142,10 @@
     }
   ],
   "execution_records": [
+    {
+      "date": "2026-07-21",
+      "action": "GitHub Actions 自动执行，成功发布文章"
+    },
     {
       "date": "2026-07-20",
       "action": "GitHub Actions 自动执行，成功发布文章"
