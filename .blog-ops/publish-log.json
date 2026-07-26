@@ -1,6 +1,11 @@
 {
   "publish_records": [
     {
+      "date": "2026-07-26",
+      "title": "黑海粮仓的沉默：一场隐秘的‘饥饿之战’",
+      "summary": "黑海粮食危机"
+    },
+    {
       "date": "2026-07-23",
       "title": "宿命对决：阿根廷vs英格兰，一部足球与历史的史诗",
       "summary": "阿根廷"
@@ -147,6 +152,10 @@
     }
   ],
   "execution_records": [
+    {
+      "date": "2026-07-26",
+      "action": "GitHub Actions 自动执行，成功发布文章"
+    },
     {
       "date": "2026-07-23",
       "action": "GitHub Actions 自动执行，成功发布文章"
