@@ -2,7 +2,6 @@
 """
 D1 REST API client for blog state management.
 
-Uses the REST API at data.klinux.dpdns.org with Bearer token auth.
 State is stored in the shared 'state' table with key 'blog_state',
 sharing the ocean database with the whispers project.
 """
