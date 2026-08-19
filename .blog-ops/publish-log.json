@@ -1,6 +1,11 @@
 {
   "publish_records": [
     {
+      "date": "2026-08-20",
+      "title": "谁是AI界的“恒大”？",
+      "summary": "AI基建"
+    },
+    {
       "date": "2026-08-19",
       "title": "当足球遇见AI：一场从内到外的观赛革命",
       "summary": "AI"
@@ -144,14 +149,13 @@
       "date": "2026-06-29",
       "title": "当哈兰德遇上巅峰对决：足球世界的AI赛场新风景",
       "summary": "哈兰德"
-    },
-    {
-      "date": "2026-06-26",
-      "title": "人才流失背后的无声战争：当Alphabet股价下跌，AI巨头在焦虑什么？",
-      "summary": "AI人才战争"
     }
   ],
   "execution_records": [
+    {
+      "date": "2026-08-20",
+      "action": "GitHub Actions 自动执行，成功发布文章"
+    },
     {
       "date": "2026-08-19",
       "action": "GitHub Actions 自动执行，成功发布文章"
