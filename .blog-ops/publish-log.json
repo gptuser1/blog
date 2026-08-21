@@ -1,6 +1,11 @@
 {
   "publish_records": [
     {
+      "date": "2026-08-22",
+      "title": "SEC的Reg Crypto：是解药还是新迷局？",
+      "summary": "自动发布"
+    },
+    {
       "date": "2026-08-20",
       "title": "谁是AI界的“恒大”？",
       "summary": "AI基建"
@@ -144,14 +149,13 @@
       "date": "2026-06-30",
       "title": "当USB成为特洛伊木马：日本自卫队网络安全防线失守的背后",
       "summary": "网络安全"
-    },
-    {
-      "date": "2026-06-29",
-      "title": "当哈兰德遇上巅峰对决：足球世界的AI赛场新风景",
-      "summary": "哈兰德"
     }
   ],
   "execution_records": [
+    {
+      "date": "2026-08-22",
+      "action": "GitHub Actions 自动执行，成功发布文章"
+    },
     {
       "date": "2026-08-20",
       "action": "GitHub Actions 自动执行，成功发布文章"
