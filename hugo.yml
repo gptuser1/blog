@@ -41,12 +41,15 @@ menu:
     - name: 文章
       url: /posts/
       weight: 10
-    - name: 分类
-      url: /categories/
-      weight: 20
-    - name: 标签
-      url: /tags/
-      weight: 30
 
 # 代码高亮
 pygmentsUseClasses: true
+
+# 关闭分类/标签落地页与索引，仅保留文章流，避免索引页膨胀文件数
+disableKinds:
+  - taxonomy
+  - term
+
+# 压缩 HTML/XML 输出
+minify:
+  minifyOutput: true
