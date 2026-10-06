@@ -1,6 +1,11 @@
 {
   "publish_records": [
     {
+      "date": "2026-10-06",
+      "title": "当所有人都相信自己是赢家：一场潜伏在AI热潮下的金融暗涌",
+      "summary": "AI"
+    },
+    {
       "date": "2026-10-05",
       "title": "山寨币的温和反弹：一场被K线照亮的慢热行情",
       "summary": "山寨币"
@@ -144,14 +149,13 @@
       "date": "2026-07-31",
       "title": "当零食开始讲营养：一场科技与农业的跨界合奏",
       "summary": "零食健康化"
-    },
-    {
-      "date": "2026-07-30",
-      "title": "当英雄老去：梅西最后一舞的憋屈与悲壮",
-      "summary": "梅西"
     }
   ],
   "execution_records": [
+    {
+      "date": "2026-10-06",
+      "action": "GitHub Actions 自动执行，成功发布文章"
+    },
     {
       "date": "2026-10-05",
       "action": "GitHub Actions 自动执行，成功发布文章"
