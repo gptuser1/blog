@@ -7,7 +7,7 @@ Handles:
 1. Check if today should publish (rhythm control: weekly min 2, checkpoints)
 2. Pick a topic (pool 70% / Tavily search 30%)
 3. Deep search for writing material via Tavily
-4. Generate article via AI (DeepSeek-V4-Flash, thinking disabled)
+4. Generate article via AI (DeepSeek-V4.1-Flash, thinking disabled)
 5. Images: Tavily search first, AI generation (CF Workers AI) as fallback
 6. Create post, lint, update publish-log
 7. Git commit and push
@@ -1233,7 +1233,7 @@ def main():
     config = load_json(CONFIG_PATH)
     print(f"Config loaded: {config.get('timezone', 'Asia/Shanghai')}")
 
-    # Initialize text providers (multi-model: default=V4-Flash for writing,
+    # Initialize text providers (multi-model: default=V4.1-Flash for writing,
     # free=Qwen3-8B for topic selection and image query construction)
     ai_text_config = config.get("ai", {}).get("text", {})
     # Support both named-profile format and legacy flat format

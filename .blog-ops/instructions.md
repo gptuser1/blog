@@ -6,7 +6,7 @@
 
 - **调度**：GitHub Actions，每天 09:00（北京时间）触发
 - **AI（多模型分工）**：
-  - DeepSeek-V4-Flash（thinking 关闭）：仅用于写文章（质量优先，用在刀刃上）
+  - DeepSeek-V4.1-Flash（thinking 关闭）：仅用于写文章（质量优先，用在刀刃上）
   - Qwen3-8B（thinking 关闭）：用于搜索模式选题、图片搜索 query 构造等辅助任务（免费，降本）
 - **作者身份**：**全局默认 `author = 'Doubao'`**（`hugo.yml` 中的默认值）。自 2026-06-25 起 Fox 写的文章显式在 front matter 中设置 `author = 'Fox'`，由 `create_post.py` 的 `--author Fox` 参数控制
 - **图片生成**：Cloudflare Workers AI（flux-2-klein-4b），作为 Tavily 搜图不足时的兜底
@@ -126,7 +126,7 @@
    - 70% 走选题池（`pick_topic.py`）
    - 30% 走 Tavily 热点搜索 → AI 挑选话题
 4. 深挖素材：Tavily advanced 搜索（含 raw_content）
-5. AI 生成文章（DeepSeek-V4-Flash，thinking 关闭）—— 仅此步用 V4-Flash
+5. AI 生成文章（DeepSeek-V4.1-Flash，thinking 关闭）—— 仅此步用 V4.1-Flash
    - system prompt 静态（可命中上下文缓存）
    - user prompt 含选题 + 素材 + 最近 3 篇标题
    - 输出 JSON：{title, content, tags, categories, image_prompts}
@@ -175,7 +175,7 @@
   "ai": {
     "text": {
       "provider": "openai",
-      "model": "deepseek-ai/DeepSeek-V4-Flash",
+      "model": "deepseek-ai/DeepSeek-V4.1-Flash",
       "base_url": "https://api.siliconflow.cn/v1"
     }
   },
