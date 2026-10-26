@@ -7,7 +7,7 @@ Handles:
 1. Check if today should publish (rhythm control: weekly min 2, checkpoints)
 2. Pick a topic (pool 70% / Tavily search 30%)
 3. Deep search for writing material via Tavily
-4. Generate article via AI (DeepSeek-V4.1-Flash, thinking disabled)
+4. Generate article via AI (DeepSeek-V4.1-Flash, thinking enabled)
 5. Images: Tavily search first, AI generation (CF Workers AI) as fallback
 6. Create post, lint, update publish-log
 7. Git commit and push
@@ -613,14 +613,14 @@ def generate_article(text_provider, topic, material_text, recent_titles, target_
     ]
 
     try:
-        response = text_provider.generate(messages, max_tokens=4096, temperature=0.85, enable_thinking=False)
+        response = text_provider.generate(messages, max_tokens=8192, temperature=0.85, enable_thinking=True)
     except Exception as e:
         print(f"AI article generation failed (attempt 1): {e}", file=sys.stderr)
         # Retry once after a short pause
         import time
         time.sleep(5)
         try:
-            response = text_provider.generate(messages, max_tokens=4096, temperature=0.85, enable_thinking=False)
+            response = text_provider.generate(messages, max_tokens=8192, temperature=0.85, enable_thinking=True)
             print("Retry succeeded")
         except Exception as e2:
             print(f"AI article generation failed (attempt 2): {e2}", file=sys.stderr)

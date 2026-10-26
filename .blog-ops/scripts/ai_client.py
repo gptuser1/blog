@@ -118,7 +118,7 @@ class OpenAIText(TextProvider):
         }
 
         try:
-            resp = requests.post(url, json=payload, headers=headers, timeout=180)
+            resp = requests.post(url, json=payload, headers=headers, timeout=300)
             resp.raise_for_status()
             result = resp.json()
 
