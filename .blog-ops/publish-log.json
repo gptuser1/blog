@@ -1,6 +1,11 @@
 {
   "publish_records": [
     {
+      "date": "2026-10-27",
+      "title": "当一座内陆小城开始发光：Wagga Wagga 的楼市逆袭",
+      "summary": "澳洲楼市"
+    },
+    {
       "date": "2026-10-26",
       "title": "走出屏幕：户外运动如何悄悄改写我们的生活剧本",
       "summary": "自动发布"
@@ -144,14 +149,13 @@
       "date": "2026-08-19",
       "title": "当足球遇见AI：一场从内到外的观赛革命",
       "summary": "AI"
-    },
-    {
-      "date": "2026-08-17",
-      "title": "当论文变成地缘政治的筹码：哈佛与国防七子合作风波背后",
-      "summary": "中美科技"
     }
   ],
   "execution_records": [
+    {
+      "date": "2026-10-27",
+      "action": "GitHub Actions 自动执行，成功发布文章"
+    },
     {
       "date": "2026-10-26",
       "action": "GitHub Actions 自动执行，成功发布文章"
