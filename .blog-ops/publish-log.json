@@ -1,6 +1,11 @@
 {
   "publish_records": [
     {
+      "date": "2026-11-03",
+      "title": "当柯基开始卖保险：Corgi 的 300 亿估值里，藏着 AI 最不性感的那部分",
+      "summary": "AI保险"
+    },
+    {
       "date": "2026-11-02",
       "title": "东南亚粮食安全：当气候开始收税，科技能付多少",
       "summary": "粮食安全"
@@ -144,14 +149,13 @@
       "date": "2026-08-24",
       "title": "AI for Science：当科研从“小作坊”走向“安卓模式”",
       "summary": "AI for Science"
-    },
-    {
-      "date": "2026-08-22",
-      "title": "SEC的Reg Crypto：是解药还是新迷局？",
-      "summary": "自动发布"
     }
   ],
   "execution_records": [
+    {
+      "date": "2026-11-03",
+      "action": "GitHub Actions 自动执行，成功发布文章"
+    },
     {
       "date": "2026-11-02",
       "action": "GitHub Actions 自动执行，成功发布文章"
