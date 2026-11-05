@@ -1,6 +1,11 @@
 {
   "publish_records": [
     {
+      "date": "2026-11-05",
+      "title": "“科技向善”成了共识之后，剩下的全是账单",
+      "summary": "科技向善"
+    },
+    {
       "date": "2026-11-03",
       "title": "当柯基开始卖保险：Corgi 的 300 亿估值里，藏着 AI 最不性感的那部分",
       "summary": "AI保险"
@@ -144,14 +149,13 @@
       "date": "2026-08-25",
       "title": "体育直播的浪潮：当观赛变成一种体验经济",
       "summary": "体育直播"
-    },
-    {
-      "date": "2026-08-24",
-      "title": "AI for Science：当科研从“小作坊”走向“安卓模式”",
-      "summary": "AI for Science"
     }
   ],
   "execution_records": [
+    {
+      "date": "2026-11-05",
+      "action": "GitHub Actions 自动执行，成功发布文章"
+    },
     {
       "date": "2026-11-03",
       "action": "GitHub Actions 自动执行，成功发布文章"
